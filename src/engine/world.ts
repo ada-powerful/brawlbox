@@ -1,0 +1,52 @@
+import type { Vec2 } from './vec.ts';
+import { vec } from './vec.ts';
+
+export const STAGE_WIDTH = 960;
+export const STAGE_HEIGHT = 540;
+export const GROUND_Y_SCREEN = 460;
+export const STAGE_LEFT_X = 40;
+export const STAGE_RIGHT_X = 920;
+
+export const Btn = {
+  Up: 1 << 0,
+  Down: 1 << 1,
+  Left: 1 << 2,
+  Right: 1 << 3,
+  A: 1 << 4,
+  B: 1 << 5,
+  C: 1 << 6,
+  X: 1 << 7,
+  Y: 1 << 8,
+  Z: 1 << 9,
+} as const;
+
+export type ButtonMask = number;
+
+export interface PlayerInput {
+  buttons: ButtonMask;
+}
+
+export interface Inputs {
+  players: PlayerInput[];
+}
+
+export interface Player {
+  pos: Vec2;
+  vel: Vec2;
+  facing: 1 | -1;
+}
+
+export interface World {
+  tick: number;
+  players: Player[];
+}
+
+export function createWorld(): World {
+  return {
+    tick: 0,
+    players: [
+      { pos: vec(360, 0), vel: vec(0, 0), facing: 1 },
+      { pos: vec(600, 0), vel: vec(0, 0), facing: -1 },
+    ],
+  };
+}
