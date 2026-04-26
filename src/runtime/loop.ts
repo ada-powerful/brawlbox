@@ -4,14 +4,19 @@ const TICK_MS = 1000 / 60;
 const MAX_TICKS_PER_FRAME = 4;
 
 export interface LoopOptions {
-  initialWorld: World;
+  createWorld: () => World;
   pollInputs: () => Inputs;
   tick: (world: World, inputs: Inputs) => World;
   render: (prev: World, curr: World, alpha: number) => void;
 }
 
-export function startLoop(opts: LoopOptions): () => void {
-  let curr = opts.initialWorld;
+export interface LoopHandle {
+  stop: () => void;
+  reset: () => void;
+}
+
+export function startLoop(opts: LoopOptions): LoopHandle {
+  let curr = opts.createWorld();
   let prev = structuredClone(curr);
   let accumulator = 0;
   let lastTime = performance.now();
@@ -39,8 +44,16 @@ export function startLoop(opts: LoopOptions): () => void {
   };
   rafHandle = requestAnimationFrame(frame);
 
-  return () => {
-    stopped = true;
-    cancelAnimationFrame(rafHandle);
+  return {
+    stop: () => {
+      stopped = true;
+      cancelAnimationFrame(rafHandle);
+    },
+    reset: () => {
+      curr = opts.createWorld();
+      prev = structuredClone(curr);
+      accumulator = 0;
+      lastTime = performance.now();
+    },
   };
 }

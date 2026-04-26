@@ -5,6 +5,7 @@ import { createWorld } from './engine/world.ts';
 import { pollInputs, startKeyboard } from './input/keyboard.ts';
 import { startApp } from './render/app.ts';
 import { FighterRenderer } from './render/fighter.ts';
+import { HealthBars, MatchOverlay } from './render/hud.ts';
 import { createStage } from './render/stage.ts';
 import { startLoop } from './runtime/loop.ts';
 
@@ -22,10 +23,15 @@ async function main(): Promise<void> {
   app.stage.addChild(p1.gfx);
   app.stage.addChild(p2.gfx);
 
+  const healthBars = new HealthBars();
+  app.stage.addChild(healthBars.gfx);
+  const matchOverlay = new MatchOverlay();
+  app.stage.addChild(matchOverlay.gfx);
+
   startKeyboard(window);
 
-  startLoop({
-    initialWorld: createWorld(),
+  const handle = startLoop({
+    createWorld: () => createWorld(),
     pollInputs,
     tick: (w, inp) => tick(w, characters, inp),
     render: (prev, curr, alpha) => {
@@ -35,7 +41,13 @@ async function main(): Promise<void> {
       const d = curr.players[1];
       if (a && b) p1.update(a, b, alpha);
       if (c && d) p2.update(c, d, alpha);
+      healthBars.update(curr);
+      matchOverlay.update(curr);
     },
+  });
+
+  window.addEventListener('keydown', (e) => {
+    if (e.code === 'KeyR') handle.reset();
   });
 }
 

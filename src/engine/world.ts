@@ -49,11 +49,15 @@ export interface Player {
 export interface World {
   tick: number;
   players: Player[];
+  matchOver: boolean;
+  winner: number | null;
 }
 
 export function createWorld(p1Char = 'base', p2Char = 'base'): World {
   return {
     tick: 0,
+    matchOver: false,
+    winner: null,
     players: [
       {
         characterId: p1Char,
