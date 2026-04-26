@@ -4,6 +4,7 @@ import { parseCharacter } from './engine/schema.ts';
 import { createWorld } from './engine/world.ts';
 import { pollInputs, startKeyboard } from './input/keyboard.ts';
 import { startApp } from './render/app.ts';
+import { DebugOverlay } from './render/debug.ts';
 import { FighterRenderer } from './render/fighter.ts';
 import { HealthBars, MatchOverlay } from './render/hud.ts';
 import { createStage } from './render/stage.ts';
@@ -27,6 +28,8 @@ async function main(): Promise<void> {
   app.stage.addChild(healthBars.gfx);
   const matchOverlay = new MatchOverlay();
   app.stage.addChild(matchOverlay.gfx);
+  const debugOverlay = new DebugOverlay();
+  app.stage.addChild(debugOverlay.gfx);
 
   startKeyboard(window);
 
@@ -43,11 +46,16 @@ async function main(): Promise<void> {
       if (c && d) p2.update(c, d, alpha);
       healthBars.update(curr);
       matchOverlay.update(curr);
+      debugOverlay.update(curr, characters);
     },
   });
 
   window.addEventListener('keydown', (e) => {
     if (e.code === 'KeyR') handle.reset();
+    if (e.code === 'F1' || e.code === 'Backquote') {
+      e.preventDefault();
+      debugOverlay.toggle();
+    }
   });
 }
 
