@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ftg</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        background: #0a0a0a;
+        color: #ddd;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+      #app {
+        display: grid;
+        place-items: center;
+        min-height: 100vh;
+      }
+      canvas {
+        display: block;
+        image-rendering: pixelated;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
