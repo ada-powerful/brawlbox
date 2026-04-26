@@ -20,11 +20,33 @@
     "height": 100,
     "headY": 92
   },
+  "animations": {
+    "stand": {
+      "loop": false,
+      "frames": [{ "sprite": "stand", "duration": -1 }]
+    },
+    "walk": {
+      "loop": true,
+      "frames": [
+        { "sprite": "walk-0", "duration": 8 },
+        { "sprite": "walk-1", "duration": 8 }
+      ]
+    },
+    "jump.rise": {
+      "loop": false,
+      "frames": [{ "sprite": "jump-rise", "duration": -1 }]
+    },
+    "jump.fall": {
+      "loop": false,
+      "frames": [{ "sprite": "jump-fall", "duration": -1 }]
+    }
+  },
   "states": {
     "stand": {
       "type": "S",
       "moveType": "I",
       "physics": "S",
+      "anim": "stand",
       "ctrl": 1,
       "velSet": { "x": 0 },
       "controllers": [
@@ -50,6 +72,7 @@
       "type": "S",
       "moveType": "I",
       "physics": "N",
+      "anim": "walk",
       "ctrl": 1,
       "controllers": [
         {
@@ -84,9 +107,15 @@
       "type": "A",
       "moveType": "I",
       "physics": "A",
+      "anim": "jump.rise",
       "velSet": { "y": 9 },
       "ctrl": 0,
       "controllers": [
+        {
+          "type": "ChangeAnim",
+          "value": "jump.fall",
+          "trigger": { "op": "lt", "left": { "ref": "vel.y" }, "right": { "const": 0 } }
+        },
         {
           "type": "ChangeState",
           "value": "stand",

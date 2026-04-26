@@ -132,12 +132,15 @@ describe('evalTrigger', () => {
         evalTrigger({ op: 'gt', left: { ref: 'vel.y' }, right: { const: 5 } }, c),
       ).toBe(true);
     });
-    test('animTime / animElem default to 0 when ctx omits', () => {
+    test('animTime and animElem read from player', () => {
+      const c = ctx();
+      c.player.animTime = 4;
+      c.player.animFrame = 2;
       expect(
-        evalTrigger({ op: 'eq', left: { ref: 'animTime' }, right: { const: 0 } }, ctx()),
+        evalTrigger({ op: 'eq', left: { ref: 'animTime' }, right: { const: 4 } }, c),
       ).toBe(true);
       expect(
-        evalTrigger({ op: 'eq', left: { ref: 'animElem' }, right: { const: 0 } }, ctx()),
+        evalTrigger({ op: 'eq', left: { ref: 'animElem' }, right: { const: 2 } }, c),
       ).toBe(true);
     });
   });

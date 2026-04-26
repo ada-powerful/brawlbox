@@ -3,7 +3,10 @@ import { stepStateMachine } from '../src/engine/stateMachine.ts';
 import type { Character } from '../src/engine/schema.ts';
 import { Btn, createWorld } from '../src/engine/world.ts';
 
-function makeCharacter(states: Character['states']): Character {
+function makeCharacter(
+  states: Character['states'],
+  animations?: Character['animations'],
+): Character {
   return {
     meta: { id: 't', name: 't', author: 't', version: '0.0.0' },
     data: {
@@ -18,6 +21,7 @@ function makeCharacter(states: Character['states']): Character {
     },
     size: { width: 60, height: 100, headY: 92 },
     states,
+    animations,
   };
 }
 
@@ -86,6 +90,104 @@ describe('stepStateMachine', () => {
     expect(world.players[0]!.stateId).toBe('jump');
     expect(world.players[0]!.vel.y).toBe(9);
     expect(world.players[0]!.ctrl).toBe(false);
+  });
+
+  test('ChangeState applies new state animation', () => {
+    const c = makeCharacter(
+      {
+        stand: {
+          type: 'S',
+          moveType: 'I',
+          physics: 'S',
+          anim: 'idle',
+          controllers: [
+            {
+              type: 'ChangeState',
+              value: 'walk',
+              trigger: { op: 'button', held: 'right' },
+            },
+          ],
+        },
+        walk: {
+          type: 'S',
+          moveType: 'I',
+          physics: 'N',
+          anim: 'walking',
+          controllers: [],
+        },
+      },
+      {
+        idle: {
+          loop: false,
+          frames: [
+            { sprite: 's', duration: -1, offset: { x: 0, y: 0 }, hitboxes: [], hurtboxes: [] },
+          ],
+        },
+        walking: {
+          loop: true,
+          frames: [
+            { sprite: 'a', duration: 8, offset: { x: 0, y: 0 }, hitboxes: [], hurtboxes: [] },
+          ],
+        },
+      },
+    );
+    const world = createWorld();
+    world.players[0]!.animId = 'idle';
+    world.players[0]!.animFrame = 4;
+    world.players[0]!.animTime = 3;
+    stepStateMachine(world.players[0]!, c, {
+      world,
+      inputs: { players: [{ buttons: Btn.Right }, { buttons: 0 }] },
+      playerIndex: 0,
+    });
+    expect(world.players[0]!.animId).toBe('walking');
+    expect(world.players[0]!.animFrame).toBe(0);
+    expect(world.players[0]!.animTime).toBe(0);
+  });
+
+  test('ChangeAnim controller swaps animation without state change', () => {
+    const c = makeCharacter(
+      {
+        jump: {
+          type: 'A',
+          moveType: 'I',
+          physics: 'A',
+          anim: 'rise',
+          controllers: [
+            {
+              type: 'ChangeAnim',
+              value: 'fall',
+              trigger: { op: 'lt', left: { ref: 'vel.y' }, right: { const: 0 } },
+            },
+          ],
+        },
+      },
+      {
+        rise: {
+          loop: false,
+          frames: [
+            { sprite: 'r', duration: -1, offset: { x: 0, y: 0 }, hitboxes: [], hurtboxes: [] },
+          ],
+        },
+        fall: {
+          loop: false,
+          frames: [
+            { sprite: 'f', duration: -1, offset: { x: 0, y: 0 }, hitboxes: [], hurtboxes: [] },
+          ],
+        },
+      },
+    );
+    const world = createWorld();
+    world.players[0]!.stateId = 'jump';
+    world.players[0]!.animId = 'rise';
+    world.players[0]!.vel.y = -2;
+    stepStateMachine(world.players[0]!, c, {
+      world,
+      inputs: { players: [{ buttons: 0 }, { buttons: 0 }] },
+      playerIndex: 0,
+    });
+    expect(world.players[0]!.animId).toBe('fall');
+    expect(world.players[0]!.stateId).toBe('jump');
   });
 
   test('VelSet controller modifies player vel', () => {

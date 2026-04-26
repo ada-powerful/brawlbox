@@ -1,3 +1,4 @@
+import { advanceAnimation } from './animation.ts';
 import type { Character } from './schema.ts';
 import type { Inputs, Player, World } from './world.ts';
 import { STAGE_LEFT_X, STAGE_RIGHT_X } from './world.ts';
@@ -26,6 +27,8 @@ export function tick(
       p.pos.y = 0;
       if (p.vel.y < 0) p.vel.y = 0;
     }
+
+    advanceAnimation(p, character);
   }
 
   world.tick++;

@@ -70,6 +70,38 @@ const TriggerSchema: z.ZodType<Trigger> = z.lazy(() =>
 const Vec2Schema = z.object({ x: z.number(), y: z.number() });
 const Vec2PartialSchema = z.object({ x: z.number().optional(), y: z.number().optional() });
 
+const AABBSchema = z.object({
+  x: z.number(),
+  y: z.number(),
+  w: z.number().nonnegative(),
+  h: z.number().nonnegative(),
+});
+
+const FrameRectSchema = z.object({
+  x: z.number().nonnegative(),
+  y: z.number().nonnegative(),
+  w: z.number().positive(),
+  h: z.number().positive(),
+});
+
+const AnimFrameSchema = z.object({
+  sprite: z.string().min(1),
+  duration: z.number().int(),
+  offset: z.object({ x: z.number(), y: z.number() }).default({ x: 0, y: 0 }),
+  hurtboxes: z.array(AABBSchema).default([]),
+  hitboxes: z.array(AABBSchema).default([]),
+});
+
+const AnimationSchema = z.object({
+  loop: z.boolean(),
+  frames: z.array(AnimFrameSchema).min(1),
+});
+
+export type AABB = z.infer<typeof AABBSchema>;
+export type FrameRect = z.infer<typeof FrameRectSchema>;
+export type AnimFrame = z.infer<typeof AnimFrameSchema>;
+export type Animation = z.infer<typeof AnimationSchema>;
+
 const ControllerSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('ChangeState'),
@@ -138,25 +170,54 @@ const CharacterSchema = z.object({
     headY: z.number(),
   }),
   states: z.record(z.string().min(1), StateSchema),
+  animations: z.record(z.string().min(1), AnimationSchema).optional(),
+  spriteAtlas: z
+    .object({
+      url: z.string(),
+      frames: z.record(z.string().min(1), FrameRectSchema),
+    })
+    .optional(),
 });
 
 export type Character = z.infer<typeof CharacterSchema>;
 
-export { CharacterSchema, ControllerSchema, StateSchema, TriggerSchema, ValueSchema };
+export {
+  AABBSchema,
+  AnimationSchema,
+  AnimFrameSchema,
+  CharacterSchema,
+  ControllerSchema,
+  FrameRectSchema,
+  StateSchema,
+  TriggerSchema,
+  ValueSchema,
+};
 
 export function parseCharacter(json: unknown): Character {
   const c = CharacterSchema.parse(json);
-  validateStateReferences(c);
+  validateReferences(c);
   return c;
 }
 
-function validateStateReferences(c: Character): void {
-  const known = new Set(Object.keys(c.states));
+function validateReferences(c: Character): void {
+  const knownStates = new Set(Object.keys(c.states));
+  const knownAnims = new Set(Object.keys(c.animations ?? {}));
+
   for (const [stateId, state] of Object.entries(c.states)) {
+    if (state.anim !== undefined && !knownAnims.has(state.anim)) {
+      throw new Error(
+        `Character "${c.meta.id}": state "${stateId}" references unknown animation "${state.anim}"`,
+      );
+    }
     for (const ctrl of state.controllers) {
-      if (ctrl.type === 'ChangeState' && !known.has(ctrl.value)) {
+      if (ctrl.type === 'ChangeState' && !knownStates.has(ctrl.value)) {
         throw new Error(
           `Character "${c.meta.id}": state "${stateId}" has ChangeState to unknown state "${ctrl.value}"`,
+        );
+      }
+      if (ctrl.type === 'ChangeAnim' && !knownAnims.has(ctrl.value)) {
+        throw new Error(
+          `Character "${c.meta.id}": state "${stateId}" has ChangeAnim to unknown animation "${ctrl.value}"`,
         );
       }
     }

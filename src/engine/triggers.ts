@@ -7,8 +7,6 @@ export interface TriggerCtx {
   player: Player;
   inputs: Inputs;
   playerIndex: number;
-  animTime?: number;
-  animElem?: number;
   moveContact?: boolean;
   moveHit?: boolean;
   moveGuarded?: boolean;
@@ -81,9 +79,9 @@ function evalValue(v: Value, ctx: TriggerCtx): number | string | boolean {
     case 'stateNo':
       return ctx.player.stateId;
     case 'animTime':
-      return ctx.animTime ?? 0;
+      return ctx.player.animTime;
     case 'animElem':
-      return ctx.animElem ?? 0;
+      return ctx.player.animFrame;
     case 'vel.x':
       return ctx.player.vel.x;
     case 'vel.y':

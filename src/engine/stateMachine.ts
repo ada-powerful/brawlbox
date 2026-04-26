@@ -1,3 +1,4 @@
+import { setAnimation } from './animation.ts';
 import type { Character } from './schema.ts';
 import type { Inputs, Player, World } from './world.ts';
 import { evalTrigger } from './triggers.ts';
@@ -11,6 +12,9 @@ export function applyStateHeader(p: Player, character: Character, stateId: strin
   }
   if (state.ctrl !== undefined) {
     p.ctrl = state.ctrl === 1;
+  }
+  if (state.anim !== undefined) {
+    setAnimation(p, state.anim);
   }
 }
 
@@ -46,7 +50,7 @@ export function stepStateMachine(
         changed = true;
         break;
       case 'ChangeAnim':
-        // M3 hooks animation player; tracked-but-no-op for now
+        setAnimation(player, c.value);
         break;
       case 'VelSet':
         if (c.x !== undefined) player.vel.x = c.x;

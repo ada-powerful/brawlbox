@@ -36,6 +36,9 @@ export interface Player {
   stateId: string;
   stateTime: number;
   ctrl: boolean;
+  animId: string;
+  animFrame: number;
+  animTime: number;
 }
 
 export interface World {
@@ -55,6 +58,9 @@ export function createWorld(p1Char = 'base', p2Char = 'base'): World {
         stateId: 'stand',
         stateTime: 0,
         ctrl: true,
+        animId: 'stand',
+        animFrame: 0,
+        animTime: 0,
       },
       {
         characterId: p2Char,
@@ -64,6 +70,9 @@ export function createWorld(p1Char = 'base', p2Char = 'base'): World {
         stateId: 'stand',
         stateTime: 0,
         ctrl: true,
+        animId: 'stand',
+        animFrame: 0,
+        animTime: 0,
       },
     ],
   };
