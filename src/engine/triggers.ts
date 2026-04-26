@@ -1,4 +1,5 @@
-import type { Trigger, Value } from './schema.ts';
+import { matchMotion, parseMotion, type ParsedMotion } from './commands.ts';
+import type { Character, Trigger, Value } from './schema.ts';
 import type { Inputs, Player, World } from './world.ts';
 import { Btn } from './world.ts';
 
@@ -7,6 +8,7 @@ export interface TriggerCtx {
   player: Player;
   inputs: Inputs;
   playerIndex: number;
+  character: Character;
   moveContact?: boolean;
   moveHit?: boolean;
   moveGuarded?: boolean;
@@ -45,7 +47,7 @@ export function evalTrigger(trig: Trigger, ctx: TriggerCtx): boolean {
     case 'button':
       return evalButton(trig.held, ctx);
     case 'command':
-      return false;
+      return evalCommand(trig.name, ctx);
   }
 }
 
@@ -117,4 +119,36 @@ function evalButton(name: string, ctx: TriggerCtx): boolean {
   const bit = BUTTON_BIT[name];
   if (bit === undefined) return false;
   return (inp.buttons & bit) !== 0;
+}
+
+const motionCache = new WeakMap<Character, Map<string, ParsedMotion | null>>();
+
+function getParsedMotion(character: Character, name: string): ParsedMotion | null {
+  let chMap = motionCache.get(character);
+  if (!chMap) {
+    chMap = new Map();
+    motionCache.set(character, chMap);
+  }
+  if (chMap.has(name)) return chMap.get(name) ?? null;
+  const cmd = character.commands?.find((c) => c.name === name);
+  if (!cmd) {
+    chMap.set(name, null);
+    return null;
+  }
+  try {
+    const parsed = parseMotion(cmd.motion);
+    chMap.set(name, parsed);
+    return parsed;
+  } catch {
+    chMap.set(name, null);
+    return null;
+  }
+}
+
+function evalCommand(name: string, ctx: TriggerCtx): boolean {
+  const cmd = ctx.character.commands?.find((c) => c.name === name);
+  if (!cmd) return false;
+  const motion = getParsedMotion(ctx.character, name);
+  if (!motion) return false;
+  return matchMotion(motion, ctx.player.inputBuffer, ctx.player.facing, cmd.bufferTicks);
 }

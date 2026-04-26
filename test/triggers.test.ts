@@ -1,7 +1,26 @@
 import { describe, expect, test } from 'vitest';
 import { evalTrigger, type TriggerCtx } from '../src/engine/triggers.ts';
-import type { Trigger } from '../src/engine/schema.ts';
+import type { Character, Trigger } from '../src/engine/schema.ts';
 import { Btn, createWorld } from '../src/engine/world.ts';
+
+function makeCharacter(extra: Partial<Character> = {}): Character {
+  return {
+    meta: { id: 'c', name: 'c', author: 'c', version: '0.0.0' },
+    data: {
+      life: 1000,
+      attack: 100,
+      defence: 100,
+      walkFwd: 3,
+      walkBack: -2.4,
+      jumpVel: { x: 0, y: 9 },
+      gravity: 0.5,
+      groundFriction: 0.85,
+    },
+    size: { width: 60, height: 100, headY: 92 },
+    states: {},
+    ...extra,
+  };
+}
 
 function ctx(overrides: Partial<TriggerCtx> = {}): TriggerCtx {
   const world = createWorld();
@@ -11,6 +30,7 @@ function ctx(overrides: Partial<TriggerCtx> = {}): TriggerCtx {
     player,
     inputs: { players: [{ buttons: 0 }, { buttons: 0 }] },
     playerIndex: 0,
+    character: makeCharacter(),
     ...overrides,
   };
 }
@@ -18,20 +38,14 @@ function ctx(overrides: Partial<TriggerCtx> = {}): TriggerCtx {
 describe('evalTrigger', () => {
   describe('comparison ops', () => {
     test('eq numbers', () => {
-      const t: Trigger = {
-        op: 'eq',
-        left: { ref: 'pos.y' },
-        right: { const: 0 },
-      };
-      expect(evalTrigger(t, ctx())).toBe(true);
+      expect(
+        evalTrigger({ op: 'eq', left: { ref: 'pos.y' }, right: { const: 0 } }, ctx()),
+      ).toBe(true);
     });
     test('ne numbers', () => {
-      const t: Trigger = {
-        op: 'ne',
-        left: { ref: 'pos.y' },
-        right: { const: 5 },
-      };
-      expect(evalTrigger(t, ctx())).toBe(true);
+      expect(
+        evalTrigger({ op: 'ne', left: { ref: 'pos.y' }, right: { const: 5 } }, ctx()),
+      ).toBe(true);
     });
     test('lt / le / gt / ge', () => {
       const c = ctx();
@@ -50,20 +64,17 @@ describe('evalTrigger', () => {
       ).toBe(true);
     });
     test('eq strings (stateNo)', () => {
-      const t: Trigger = {
-        op: 'eq',
-        left: { ref: 'stateNo' },
-        right: { const: 'stand' },
-      };
-      expect(evalTrigger(t, ctx())).toBe(true);
+      expect(
+        evalTrigger(
+          { op: 'eq', left: { ref: 'stateNo' }, right: { const: 'stand' } },
+          ctx(),
+        ),
+      ).toBe(true);
     });
     test('mixed-type compare returns false (no coercion)', () => {
-      const t: Trigger = {
-        op: 'eq',
-        left: { ref: 'stateNo' },
-        right: { const: 0 },
-      };
-      expect(evalTrigger(t, ctx())).toBe(false);
+      expect(
+        evalTrigger({ op: 'eq', left: { ref: 'stateNo' }, right: { const: 0 } }, ctx()),
+      ).toBe(false);
     });
   });
 
@@ -181,8 +192,37 @@ describe('evalTrigger', () => {
   });
 
   describe('command', () => {
-    test('returns false until M4', () => {
-      expect(evalTrigger({ op: 'command', name: 'qcf_x' }, ctx())).toBe(false);
+    test('returns false when command not defined on character', () => {
+      expect(evalTrigger({ op: 'command', name: 'unknown' }, ctx())).toBe(false);
+    });
+
+    test('matches when motion completes at current tick', () => {
+      const character = makeCharacter({
+        commands: [{ name: 'fireball', motion: 'D, DF, F, x', bufferTicks: 15 }],
+      });
+      const c = ctx({ character });
+      c.player.inputBuffer = [
+        Btn.Down,
+        Btn.Down | Btn.Right,
+        Btn.Right,
+        Btn.Right | Btn.X,
+      ];
+      expect(evalTrigger({ op: 'command', name: 'fireball' }, c)).toBe(true);
+    });
+
+    test('does not match if button released before current tick', () => {
+      const character = makeCharacter({
+        commands: [{ name: 'fireball', motion: 'D, DF, F, x', bufferTicks: 15 }],
+      });
+      const c = ctx({ character });
+      c.player.inputBuffer = [
+        Btn.Down,
+        Btn.Down | Btn.Right,
+        Btn.Right,
+        Btn.Right | Btn.X,
+        0,
+      ];
+      expect(evalTrigger({ op: 'command', name: 'fireball' }, c)).toBe(false);
     });
   });
 });

@@ -15,6 +15,7 @@ function makePlayer(animId = 'test', animFrame = 0, animTime = 0): Player {
     animId,
     animFrame,
     animTime,
+    inputBuffer: [],
   };
 }
 

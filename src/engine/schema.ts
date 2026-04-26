@@ -97,10 +97,17 @@ const AnimationSchema = z.object({
   frames: z.array(AnimFrameSchema).min(1),
 });
 
+const CommandSchema = z.object({
+  name: z.string().min(1),
+  motion: z.string().min(1),
+  bufferTicks: z.number().int().positive().default(15),
+});
+
 export type AABB = z.infer<typeof AABBSchema>;
 export type FrameRect = z.infer<typeof FrameRectSchema>;
 export type AnimFrame = z.infer<typeof AnimFrameSchema>;
 export type Animation = z.infer<typeof AnimationSchema>;
+export type Command = z.infer<typeof CommandSchema>;
 
 const ControllerSchema = z.discriminatedUnion('type', [
   z.object({
@@ -171,6 +178,7 @@ const CharacterSchema = z.object({
   }),
   states: z.record(z.string().min(1), StateSchema),
   animations: z.record(z.string().min(1), AnimationSchema).optional(),
+  commands: z.array(CommandSchema).optional(),
   spriteAtlas: z
     .object({
       url: z.string(),
@@ -186,6 +194,7 @@ export {
   AnimationSchema,
   AnimFrameSchema,
   CharacterSchema,
+  CommandSchema,
   ControllerSchema,
   FrameRectSchema,
   StateSchema,
@@ -202,6 +211,7 @@ export function parseCharacter(json: unknown): Character {
 function validateReferences(c: Character): void {
   const knownStates = new Set(Object.keys(c.states));
   const knownAnims = new Set(Object.keys(c.animations ?? {}));
+  const knownCommands = new Set((c.commands ?? []).map((cmd) => cmd.name));
 
   for (const [stateId, state] of Object.entries(c.states)) {
     if (state.anim !== undefined && !knownAnims.has(state.anim)) {
@@ -220,6 +230,33 @@ function validateReferences(c: Character): void {
           `Character "${c.meta.id}": state "${stateId}" has ChangeAnim to unknown animation "${ctrl.value}"`,
         );
       }
+      checkCommandRefs(ctrl.trigger, knownCommands, c.meta.id, stateId);
     }
+  }
+}
+
+function checkCommandRefs(
+  trig: Trigger,
+  known: Set<string>,
+  charId: string,
+  stateId: string,
+): void {
+  switch (trig.op) {
+    case 'command':
+      if (!known.has(trig.name)) {
+        throw new Error(
+          `Character "${charId}": state "${stateId}" trigger references unknown command "${trig.name}"`,
+        );
+      }
+      return;
+    case 'and':
+    case 'or':
+      for (const a of trig.args) checkCommandRefs(a, known, charId, stateId);
+      return;
+    case 'not':
+      checkCommandRefs(trig.arg, known, charId, stateId);
+      return;
+    default:
+      return;
   }
 }

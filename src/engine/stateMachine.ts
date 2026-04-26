@@ -38,6 +38,7 @@ export function stepStateMachine(
       player,
       inputs: ctx.inputs,
       playerIndex: ctx.playerIndex,
+      character,
     };
     if (!evalTrigger(c.trigger, trigCtx)) continue;
 

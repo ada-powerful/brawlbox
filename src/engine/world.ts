@@ -39,6 +39,7 @@ export interface Player {
   animId: string;
   animFrame: number;
   animTime: number;
+  inputBuffer: number[];
 }
 
 export interface World {
@@ -61,6 +62,7 @@ export function createWorld(p1Char = 'base', p2Char = 'base'): World {
         animId: 'stand',
         animFrame: 0,
         animTime: 0,
+        inputBuffer: [],
       },
       {
         characterId: p2Char,
@@ -73,6 +75,7 @@ export function createWorld(p1Char = 'base', p2Char = 'base'): World {
         animId: 'stand',
         animFrame: 0,
         animTime: 0,
+        inputBuffer: [],
       },
     ],
   };

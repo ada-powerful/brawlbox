@@ -1,4 +1,5 @@
 import { advanceAnimation } from './animation.ts';
+import { recordInput } from './commands.ts';
 import type { Character } from './schema.ts';
 import type { Inputs, Player, World } from './world.ts';
 import { STAGE_LEFT_X, STAGE_RIGHT_X } from './world.ts';
@@ -14,6 +15,9 @@ export function tick(
     if (!p) continue;
     const character = characters[p.characterId];
     if (!character) continue;
+
+    const inp = inputs.players[i]?.buttons ?? 0;
+    recordInput(p.inputBuffer, inp);
 
     stepStateMachine(p, character, { world, inputs, playerIndex: i });
     applyPhysics(p, character);
