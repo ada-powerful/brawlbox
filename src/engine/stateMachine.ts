@@ -27,6 +27,7 @@ export function stepStateMachine(
   if (!state) {
     player.stateId = 'stand';
     player.stateTime = 0;
+    player.activeHitDef = null;
     applyStateHeader(player, character, 'stand');
     return;
   }
@@ -46,6 +47,7 @@ export function stepStateMachine(
       case 'ChangeState':
         player.stateId = c.value;
         player.stateTime = 0;
+        player.activeHitDef = null;
         applyStateHeader(player, character, c.value);
         if (c.ctrl !== undefined) player.ctrl = c.ctrl === 1;
         changed = true;
@@ -63,6 +65,9 @@ export function stepStateMachine(
         break;
       case 'CtrlSet':
         player.ctrl = c.value === 1;
+        break;
+      case 'HitDef':
+        player.activeHitDef = c.def;
         break;
     }
 

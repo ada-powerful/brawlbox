@@ -103,11 +103,35 @@ const CommandSchema = z.object({
   bufferTicks: z.number().int().positive().default(15),
 });
 
+const HitDefSchema = z.object({
+  attr: z.object({
+    state: z.enum(['S', 'C', 'A']),
+    class: z.enum(['NA', 'SA', 'HA', 'NT', 'ST', 'HT']),
+  }),
+  damage: z.object({
+    hit: z.number().nonnegative(),
+    guard: z.number().nonnegative(),
+  }),
+  hitFlag: z.string(),
+  guardFlag: z.string(),
+  pauseTime: z.object({
+    p1: z.number().int().nonnegative(),
+    p2: z.number().int().nonnegative(),
+  }),
+  groundHitTime: z.number().int().nonnegative(),
+  groundVelocity: Vec2Schema,
+  airVelocity: Vec2Schema,
+  priority: z.number().int(),
+  fall: z.boolean().optional(),
+  sound: z.string().optional(),
+});
+
 export type AABB = z.infer<typeof AABBSchema>;
 export type FrameRect = z.infer<typeof FrameRectSchema>;
 export type AnimFrame = z.infer<typeof AnimFrameSchema>;
 export type Animation = z.infer<typeof AnimationSchema>;
 export type Command = z.infer<typeof CommandSchema>;
+export type HitDef = z.infer<typeof HitDefSchema>;
 
 const ControllerSchema = z.discriminatedUnion('type', [
   z.object({
@@ -136,6 +160,11 @@ const ControllerSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('CtrlSet'),
     value: z.union([z.literal(0), z.literal(1)]),
+    trigger: TriggerSchema,
+  }),
+  z.object({
+    type: z.literal('HitDef'),
+    def: HitDefSchema,
     trigger: TriggerSchema,
   }),
 ]);
@@ -197,6 +226,7 @@ export {
   CommandSchema,
   ControllerSchema,
   FrameRectSchema,
+  HitDefSchema,
   StateSchema,
   TriggerSchema,
   ValueSchema,

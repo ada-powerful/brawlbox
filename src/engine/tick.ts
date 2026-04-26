@@ -1,5 +1,7 @@
 import { advanceAnimation } from './animation.ts';
+import { applyPushCollision, detectHits } from './collision.ts';
 import { recordInput } from './commands.ts';
+import { applyHits } from './hitDef.ts';
 import type { Character } from './schema.ts';
 import type { Inputs, Player, World } from './world.ts';
 import { STAGE_LEFT_X, STAGE_RIGHT_X } from './world.ts';
@@ -19,6 +21,11 @@ export function tick(
     const inp = inputs.players[i]?.buttons ?? 0;
     recordInput(p.inputBuffer, inp);
 
+    if (p.hitPause > 0) {
+      p.hitPause--;
+      continue;
+    }
+
     stepStateMachine(p, character, { world, inputs, playerIndex: i });
     applyPhysics(p, character);
 
@@ -34,6 +41,11 @@ export function tick(
 
     advanceAnimation(p, character);
   }
+
+  const events = detectHits(world, characters);
+  applyHits(events, world, characters);
+
+  applyPushCollision(world, characters);
 
   world.tick++;
   return world;

@@ -1,3 +1,4 @@
+import type { HitDef } from './schema.ts';
 import type { Vec2 } from './vec.ts';
 import { vec } from './vec.ts';
 
@@ -40,6 +41,9 @@ export interface Player {
   animFrame: number;
   animTime: number;
   inputBuffer: number[];
+  life: number;
+  hitPause: number;
+  activeHitDef: HitDef | null;
 }
 
 export interface World {
@@ -63,6 +67,9 @@ export function createWorld(p1Char = 'base', p2Char = 'base'): World {
         animFrame: 0,
         animTime: 0,
         inputBuffer: [],
+        life: 1000,
+        hitPause: 0,
+        activeHitDef: null,
       },
       {
         characterId: p2Char,
@@ -76,6 +83,9 @@ export function createWorld(p1Char = 'base', p2Char = 'base'): World {
         animFrame: 0,
         animTime: 0,
         inputBuffer: [],
+        life: 1000,
+        hitPause: 0,
+        activeHitDef: null,
       },
     ],
   };

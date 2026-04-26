@@ -16,6 +16,9 @@ function makePlayer(animId = 'test', animFrame = 0, animTime = 0): Player {
     animFrame,
     animTime,
     inputBuffer: [],
+    life: 1000,
+    hitPause: 0,
+    activeHitDef: null,
   };
 }
 
@@ -85,12 +88,11 @@ describe('advanceAnimation', () => {
       },
     });
     const p = makePlayer('test');
-    // duration=3 means animTime goes 0,1,2 then advances on the 3rd advanceAnimation call
-    advanceAnimation(p, c); // 0 -> 1
+    advanceAnimation(p, c);
     expect([p.animFrame, p.animTime]).toEqual([0, 1]);
-    advanceAnimation(p, c); // 1 -> 2
+    advanceAnimation(p, c);
     expect([p.animFrame, p.animTime]).toEqual([0, 2]);
-    advanceAnimation(p, c); // 2 -> would be 3, advance to frame 1
+    advanceAnimation(p, c);
     expect([p.animFrame, p.animTime]).toEqual([1, 0]);
   });
 
@@ -105,11 +107,11 @@ describe('advanceAnimation', () => {
       },
     });
     const p = makePlayer('test');
-    advanceAnimation(p, c); // f=0 t=1
-    advanceAnimation(p, c); // f=1 t=0
+    advanceAnimation(p, c);
+    advanceAnimation(p, c);
     expect([p.animFrame, p.animTime]).toEqual([1, 0]);
-    advanceAnimation(p, c); // f=1 t=1
-    advanceAnimation(p, c); // f=0 t=0 (wrap)
+    advanceAnimation(p, c);
+    advanceAnimation(p, c);
     expect([p.animFrame, p.animTime]).toEqual([0, 0]);
   });
 

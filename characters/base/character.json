@@ -23,22 +23,93 @@
   "animations": {
     "stand": {
       "loop": false,
-      "frames": [{ "sprite": "stand", "duration": -1 }]
+      "frames": [
+        {
+          "sprite": "stand",
+          "duration": -1,
+          "hurtboxes": [{ "x": -30, "y": 0, "w": 60, "h": 100 }]
+        }
+      ]
     },
     "walk": {
       "loop": true,
       "frames": [
-        { "sprite": "walk-0", "duration": 8 },
-        { "sprite": "walk-1", "duration": 8 }
+        {
+          "sprite": "walk-0",
+          "duration": 8,
+          "hurtboxes": [{ "x": -30, "y": 0, "w": 60, "h": 100 }]
+        },
+        {
+          "sprite": "walk-1",
+          "duration": 8,
+          "hurtboxes": [{ "x": -30, "y": 0, "w": 60, "h": 100 }]
+        }
       ]
     },
     "jump.rise": {
       "loop": false,
-      "frames": [{ "sprite": "jump-rise", "duration": -1 }]
+      "frames": [
+        {
+          "sprite": "jump-rise",
+          "duration": -1,
+          "hurtboxes": [{ "x": -25, "y": 0, "w": 50, "h": 110 }]
+        }
+      ]
     },
     "jump.fall": {
       "loop": false,
-      "frames": [{ "sprite": "jump-fall", "duration": -1 }]
+      "frames": [
+        {
+          "sprite": "jump-fall",
+          "duration": -1,
+          "hurtboxes": [{ "x": -35, "y": 0, "w": 70, "h": 90 }]
+        }
+      ]
+    },
+    "punch": {
+      "loop": false,
+      "frames": [
+        {
+          "sprite": "punch-startup",
+          "duration": 4,
+          "hurtboxes": [{ "x": -30, "y": 0, "w": 60, "h": 100 }]
+        },
+        {
+          "sprite": "punch-active",
+          "duration": 3,
+          "hurtboxes": [{ "x": -30, "y": 0, "w": 60, "h": 100 }],
+          "hitboxes": [{ "x": 30, "y": 50, "w": 50, "h": 30 }]
+        },
+        {
+          "sprite": "punch-recovery",
+          "duration": 5,
+          "hurtboxes": [{ "x": -30, "y": 0, "w": 60, "h": 100 }]
+        }
+      ]
+    },
+    "hit.stand": {
+      "loop": false,
+      "frames": [
+        {
+          "sprite": "hit-stand",
+          "duration": -1,
+          "hurtboxes": [{ "x": -30, "y": 0, "w": 60, "h": 100 }]
+        }
+      ]
+    },
+    "hit.air": {
+      "loop": false,
+      "frames": [
+        {
+          "sprite": "hit-air",
+          "duration": -1,
+          "hurtboxes": [{ "x": -30, "y": 0, "w": 60, "h": 100 }]
+        }
+      ]
+    },
+    "ko": {
+      "loop": false,
+      "frames": [{ "sprite": "ko", "duration": -1 }]
     }
   },
   "states": {
@@ -50,6 +121,11 @@
       "ctrl": 1,
       "velSet": { "x": 0 },
       "controllers": [
+        {
+          "type": "ChangeState",
+          "value": "punch",
+          "trigger": { "op": "button", "held": "a" }
+        },
         {
           "type": "ChangeState",
           "value": "walk",
@@ -75,6 +151,11 @@
       "anim": "walk",
       "ctrl": 1,
       "controllers": [
+        {
+          "type": "ChangeState",
+          "value": "punch",
+          "trigger": { "op": "button", "held": "a" }
+        },
         {
           "type": "VelSet",
           "x": 3,
@@ -130,6 +211,88 @@
           }
         }
       ]
+    },
+    "punch": {
+      "type": "S",
+      "moveType": "A",
+      "physics": "N",
+      "anim": "punch",
+      "ctrl": 0,
+      "velSet": { "x": 0, "y": 0 },
+      "controllers": [
+        {
+          "type": "HitDef",
+          "def": {
+            "attr": { "state": "S", "class": "NA" },
+            "damage": { "hit": 50, "guard": 5 },
+            "hitFlag": "MAF",
+            "guardFlag": "MA",
+            "pauseTime": { "p1": 8, "p2": 8 },
+            "groundHitTime": 12,
+            "groundVelocity": { "x": 4, "y": 0 },
+            "airVelocity": { "x": 3, "y": 4 },
+            "priority": 3
+          },
+          "trigger": {
+            "op": "and",
+            "args": [
+              { "op": "eq", "left": { "ref": "animElem" }, "right": { "const": 1 } },
+              { "op": "eq", "left": { "ref": "animTime" }, "right": { "const": 0 } }
+            ]
+          }
+        },
+        {
+          "type": "ChangeState",
+          "value": "stand",
+          "ctrl": 1,
+          "trigger": { "op": "ge", "left": { "ref": "time" }, "right": { "const": 12 } }
+        }
+      ]
+    },
+    "hit.stand": {
+      "type": "S",
+      "moveType": "H",
+      "physics": "S",
+      "anim": "hit.stand",
+      "ctrl": 0,
+      "controllers": [
+        {
+          "type": "ChangeState",
+          "value": "stand",
+          "ctrl": 1,
+          "trigger": { "op": "ge", "left": { "ref": "time" }, "right": { "const": 12 } }
+        }
+      ]
+    },
+    "hit.air": {
+      "type": "A",
+      "moveType": "H",
+      "physics": "A",
+      "anim": "hit.air",
+      "ctrl": 0,
+      "controllers": [
+        {
+          "type": "ChangeState",
+          "value": "stand",
+          "ctrl": 1,
+          "trigger": {
+            "op": "and",
+            "args": [
+              { "op": "le", "left": { "ref": "pos.y" }, "right": { "const": 0 } },
+              { "op": "le", "left": { "ref": "vel.y" }, "right": { "const": 0 } },
+              { "op": "gt", "left": { "ref": "time" }, "right": { "const": 5 } }
+            ]
+          }
+        }
+      ]
+    },
+    "ko": {
+      "type": "L",
+      "moveType": "I",
+      "physics": "S",
+      "anim": "ko",
+      "ctrl": 0,
+      "controllers": []
     }
   }
 }
