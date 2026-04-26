@@ -1,28 +1,49 @@
-import type { Inputs, World } from './world.ts';
-import { Btn, STAGE_LEFT_X, STAGE_RIGHT_X } from './world.ts';
+import type { Character } from './schema.ts';
+import type { Inputs, Player, World } from './world.ts';
+import { STAGE_LEFT_X, STAGE_RIGHT_X } from './world.ts';
+import { stepStateMachine } from './stateMachine.ts';
 
-const WALK_SPEED = 3;
-
-export function tick(world: World, inputs: Inputs): World {
+export function tick(
+  world: World,
+  characters: Record<string, Character>,
+  inputs: Inputs,
+): World {
   for (let i = 0; i < world.players.length; i++) {
     const p = world.players[i];
-    const inp = inputs.players[i];
-    if (!p || !inp) continue;
+    if (!p) continue;
+    const character = characters[p.characterId];
+    if (!character) continue;
 
-    let vx = 0;
-    if ((inp.buttons & Btn.Left) !== 0) vx -= WALK_SPEED;
-    if ((inp.buttons & Btn.Right) !== 0) vx += WALK_SPEED;
-    p.vel.x = vx;
-    p.vel.y = 0;
+    stepStateMachine(p, character, { world, inputs, playerIndex: i });
+    applyPhysics(p, character);
 
     p.pos.x += p.vel.x;
     p.pos.y += p.vel.y;
 
     if (p.pos.x < STAGE_LEFT_X) p.pos.x = STAGE_LEFT_X;
     if (p.pos.x > STAGE_RIGHT_X) p.pos.x = STAGE_RIGHT_X;
-    if (p.pos.y < 0) p.pos.y = 0;
+    if (p.pos.y < 0) {
+      p.pos.y = 0;
+      if (p.vel.y < 0) p.vel.y = 0;
+    }
   }
 
   world.tick++;
   return world;
+}
+
+function applyPhysics(p: Player, character: Character): void {
+  const state = character.states[p.stateId];
+  if (!state) return;
+  switch (state.physics) {
+    case 'A':
+      p.vel.y -= character.data.gravity;
+      break;
+    case 'S':
+    case 'C':
+      p.vel.x *= character.data.groundFriction;
+      break;
+    case 'N':
+      break;
+  }
 }

@@ -20,10 +20,8 @@ export const Btn = {
   Z: 1 << 9,
 } as const;
 
-export type ButtonMask = number;
-
 export interface PlayerInput {
-  buttons: ButtonMask;
+  buttons: number;
 }
 
 export interface Inputs {
@@ -31,9 +29,13 @@ export interface Inputs {
 }
 
 export interface Player {
+  characterId: string;
   pos: Vec2;
   vel: Vec2;
   facing: 1 | -1;
+  stateId: string;
+  stateTime: number;
+  ctrl: boolean;
 }
 
 export interface World {
@@ -41,12 +43,28 @@ export interface World {
   players: Player[];
 }
 
-export function createWorld(): World {
+export function createWorld(p1Char = 'base', p2Char = 'base'): World {
   return {
     tick: 0,
     players: [
-      { pos: vec(360, 0), vel: vec(0, 0), facing: 1 },
-      { pos: vec(600, 0), vel: vec(0, 0), facing: -1 },
+      {
+        characterId: p1Char,
+        pos: vec(360, 0),
+        vel: vec(0, 0),
+        facing: 1,
+        stateId: 'stand',
+        stateTime: 0,
+        ctrl: true,
+      },
+      {
+        characterId: p2Char,
+        pos: vec(600, 0),
+        vel: vec(0, 0),
+        facing: -1,
+        stateId: 'stand',
+        stateTime: 0,
+        ctrl: true,
+      },
     ],
   };
 }

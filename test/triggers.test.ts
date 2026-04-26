@@ -1,0 +1,185 @@
+import { describe, expect, test } from 'vitest';
+import { evalTrigger, type TriggerCtx } from '../src/engine/triggers.ts';
+import type { Trigger } from '../src/engine/schema.ts';
+import { Btn, createWorld } from '../src/engine/world.ts';
+
+function ctx(overrides: Partial<TriggerCtx> = {}): TriggerCtx {
+  const world = createWorld();
+  const player = world.players[0]!;
+  return {
+    world,
+    player,
+    inputs: { players: [{ buttons: 0 }, { buttons: 0 }] },
+    playerIndex: 0,
+    ...overrides,
+  };
+}
+
+describe('evalTrigger', () => {
+  describe('comparison ops', () => {
+    test('eq numbers', () => {
+      const t: Trigger = {
+        op: 'eq',
+        left: { ref: 'pos.y' },
+        right: { const: 0 },
+      };
+      expect(evalTrigger(t, ctx())).toBe(true);
+    });
+    test('ne numbers', () => {
+      const t: Trigger = {
+        op: 'ne',
+        left: { ref: 'pos.y' },
+        right: { const: 5 },
+      };
+      expect(evalTrigger(t, ctx())).toBe(true);
+    });
+    test('lt / le / gt / ge', () => {
+      const c = ctx();
+      c.player.pos.y = 5;
+      expect(
+        evalTrigger({ op: 'lt', left: { ref: 'pos.y' }, right: { const: 10 } }, c),
+      ).toBe(true);
+      expect(
+        evalTrigger({ op: 'le', left: { ref: 'pos.y' }, right: { const: 5 } }, c),
+      ).toBe(true);
+      expect(
+        evalTrigger({ op: 'gt', left: { ref: 'pos.y' }, right: { const: 0 } }, c),
+      ).toBe(true);
+      expect(
+        evalTrigger({ op: 'ge', left: { ref: 'pos.y' }, right: { const: 5 } }, c),
+      ).toBe(true);
+    });
+    test('eq strings (stateNo)', () => {
+      const t: Trigger = {
+        op: 'eq',
+        left: { ref: 'stateNo' },
+        right: { const: 'stand' },
+      };
+      expect(evalTrigger(t, ctx())).toBe(true);
+    });
+    test('mixed-type compare returns false (no coercion)', () => {
+      const t: Trigger = {
+        op: 'eq',
+        left: { ref: 'stateNo' },
+        right: { const: 0 },
+      };
+      expect(evalTrigger(t, ctx())).toBe(false);
+    });
+  });
+
+  describe('boolean ops', () => {
+    test('and short-circuits to false', () => {
+      const t: Trigger = {
+        op: 'and',
+        args: [
+          { op: 'eq', left: { const: 1 }, right: { const: 1 } },
+          { op: 'eq', left: { const: 1 }, right: { const: 2 } },
+        ],
+      };
+      expect(evalTrigger(t, ctx())).toBe(false);
+    });
+    test('or returns true if any matches', () => {
+      const t: Trigger = {
+        op: 'or',
+        args: [
+          { op: 'eq', left: { const: 1 }, right: { const: 2 } },
+          { op: 'eq', left: { const: 1 }, right: { const: 1 } },
+        ],
+      };
+      expect(evalTrigger(t, ctx())).toBe(true);
+    });
+    test('not negates', () => {
+      const t: Trigger = {
+        op: 'not',
+        arg: { op: 'eq', left: { const: 1 }, right: { const: 1 } },
+      };
+      expect(evalTrigger(t, ctx())).toBe(false);
+    });
+    test('nested composition', () => {
+      const t: Trigger = {
+        op: 'and',
+        args: [
+          { op: 'eq', left: { const: 1 }, right: { const: 1 } },
+          {
+            op: 'or',
+            args: [
+              { op: 'eq', left: { const: 'a' }, right: { const: 'b' } },
+              { op: 'not', arg: { op: 'eq', left: { const: 'a' }, right: { const: 'b' } } },
+            ],
+          },
+        ],
+      };
+      expect(evalTrigger(t, ctx())).toBe(true);
+    });
+  });
+
+  describe('refs', () => {
+    test('time reads stateTime', () => {
+      const c = ctx();
+      c.player.stateTime = 7;
+      expect(
+        evalTrigger({ op: 'eq', left: { ref: 'time' }, right: { const: 7 } }, c),
+      ).toBe(true);
+    });
+    test('vel.x and vel.y', () => {
+      const c = ctx();
+      c.player.vel.x = -3;
+      c.player.vel.y = 9;
+      expect(
+        evalTrigger({ op: 'lt', left: { ref: 'vel.x' }, right: { const: 0 } }, c),
+      ).toBe(true);
+      expect(
+        evalTrigger({ op: 'gt', left: { ref: 'vel.y' }, right: { const: 5 } }, c),
+      ).toBe(true);
+    });
+    test('animTime / animElem default to 0 when ctx omits', () => {
+      expect(
+        evalTrigger({ op: 'eq', left: { ref: 'animTime' }, right: { const: 0 } }, ctx()),
+      ).toBe(true);
+      expect(
+        evalTrigger({ op: 'eq', left: { ref: 'animElem' }, right: { const: 0 } }, ctx()),
+      ).toBe(true);
+    });
+  });
+
+  describe('flags', () => {
+    test('ctrl reads player.ctrl', () => {
+      const c = ctx();
+      c.player.ctrl = false;
+      expect(evalTrigger({ op: 'flag', name: 'ctrl' }, c)).toBe(false);
+      c.player.ctrl = true;
+      expect(evalTrigger({ op: 'flag', name: 'ctrl' }, c)).toBe(true);
+    });
+    test('moveContact / moveHit / moveGuarded default false', () => {
+      expect(evalTrigger({ op: 'flag', name: 'moveContact' }, ctx())).toBe(false);
+      expect(evalTrigger({ op: 'flag', name: 'moveHit' }, ctx())).toBe(false);
+      expect(evalTrigger({ op: 'flag', name: 'moveGuarded' }, ctx())).toBe(false);
+    });
+  });
+
+  describe('button', () => {
+    test('held is true when bit is set', () => {
+      const c = ctx({
+        inputs: { players: [{ buttons: Btn.Right }, { buttons: 0 }] },
+      });
+      expect(evalTrigger({ op: 'button', held: 'right' }, c)).toBe(true);
+      expect(evalTrigger({ op: 'button', held: 'left' }, c)).toBe(false);
+    });
+    test('held=false when no input', () => {
+      expect(evalTrigger({ op: 'button', held: 'a' }, ctx())).toBe(false);
+    });
+    test('reads correct player by playerIndex', () => {
+      const c = ctx({
+        inputs: { players: [{ buttons: 0 }, { buttons: Btn.A }] },
+        playerIndex: 1,
+      });
+      expect(evalTrigger({ op: 'button', held: 'a' }, c)).toBe(true);
+    });
+  });
+
+  describe('command', () => {
+    test('returns false until M4', () => {
+      expect(evalTrigger({ op: 'command', name: 'qcf_x' }, ctx())).toBe(false);
+    });
+  });
+});

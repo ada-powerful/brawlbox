@@ -1,5 +1,7 @@
-import { createWorld } from './engine/world.ts';
+import baseChar from '../characters/base/character.json' with { type: 'json' };
 import { tick } from './engine/tick.ts';
+import { parseCharacter } from './engine/schema.ts';
+import { createWorld } from './engine/world.ts';
 import { pollInputs, startKeyboard } from './input/keyboard.ts';
 import { startApp } from './render/app.ts';
 import { FighterRenderer } from './render/fighter.ts';
@@ -9,6 +11,8 @@ import { startLoop } from './runtime/loop.ts';
 async function main(): Promise<void> {
   const mount = document.getElementById('app');
   if (!mount) throw new Error('mount #app missing');
+
+  const characters = { base: parseCharacter(baseChar) };
 
   const app = await startApp(mount);
   app.stage.addChild(createStage());
@@ -23,7 +27,7 @@ async function main(): Promise<void> {
   startLoop({
     initialWorld: createWorld(),
     pollInputs,
-    tick,
+    tick: (w, inp) => tick(w, characters, inp),
     render: (prev, curr, alpha) => {
       const a = prev.players[0];
       const b = curr.players[0];

@@ -1,77 +1,88 @@
 import { describe, expect, test } from 'vitest';
 import { tick } from '../src/engine/tick.ts';
+import { parseCharacter } from '../src/engine/schema.ts';
 import { Btn, createWorld, STAGE_LEFT_X, STAGE_RIGHT_X } from '../src/engine/world.ts';
 import type { Inputs } from '../src/engine/world.ts';
+import baseChar from '../characters/base/character.json' with { type: 'json' };
 
+const characters = { base: parseCharacter(baseChar) };
 const noInput: Inputs = { players: [{ buttons: 0 }, { buttons: 0 }] };
 const p1Right: Inputs = { players: [{ buttons: Btn.Right }, { buttons: 0 }] };
 const p1Left: Inputs = { players: [{ buttons: Btn.Left }, { buttons: 0 }] };
+const p1Up: Inputs = { players: [{ buttons: Btn.Up }, { buttons: 0 }] };
 
-describe('tick', () => {
-  test('increments tick counter', () => {
+describe('tick (state-machine driven)', () => {
+  test('world tick increments', () => {
     const w = createWorld();
     expect(w.tick).toBe(0);
-    tick(w, noInput);
+    tick(w, characters, noInput);
     expect(w.tick).toBe(1);
-    tick(w, noInput);
-    expect(w.tick).toBe(2);
   });
 
-  test('right input moves player 1 right', () => {
+  test('player initialised in stand', () => {
     const w = createWorld();
-    const x0 = w.players[0]!.pos.x;
-    tick(w, p1Right);
-    expect(w.players[0]!.pos.x).toBeGreaterThan(x0);
+    expect(w.players[0]!.stateId).toBe('stand');
   });
 
-  test('left input moves player 1 left', () => {
+  test('Right press transitions stand -> walk', () => {
     const w = createWorld();
-    const x0 = w.players[0]!.pos.x;
-    tick(w, p1Left);
-    expect(w.players[0]!.pos.x).toBeLessThan(x0);
+    tick(w, characters, p1Right);
+    expect(w.players[0]!.stateId).toBe('walk');
   });
 
-  test('player 2 unaffected by player 1 input', () => {
+  test('walk -> stand on no input', () => {
     const w = createWorld();
-    const x0 = w.players[1]!.pos.x;
-    tick(w, p1Right);
-    expect(w.players[1]!.pos.x).toBe(x0);
+    tick(w, characters, p1Right);
+    expect(w.players[0]!.stateId).toBe('walk');
+    tick(w, characters, noInput);
+    expect(w.players[0]!.stateId).toBe('stand');
   });
 
-  test('clamps to left stage bound', () => {
+  test('walking moves player and clamps to stage right edge', () => {
     const w = createWorld();
-    w.players[0]!.pos.x = STAGE_LEFT_X + 5;
-    for (let i = 0; i < 100; i++) tick(w, p1Left);
-    expect(w.players[0]!.pos.x).toBe(STAGE_LEFT_X);
-  });
-
-  test('clamps to right stage bound', () => {
-    const w = createWorld();
-    w.players[0]!.pos.x = STAGE_RIGHT_X - 5;
-    for (let i = 0; i < 100; i++) tick(w, p1Right);
+    w.players[0]!.pos.x = STAGE_RIGHT_X - 4;
+    for (let i = 0; i < 30; i++) tick(w, characters, p1Right);
     expect(w.players[0]!.pos.x).toBe(STAGE_RIGHT_X);
   });
 
-  test('opposing left+right cancel out', () => {
+  test('walking left clamps to stage left edge', () => {
     const w = createWorld();
-    const x0 = w.players[0]!.pos.x;
-    tick(w, { players: [{ buttons: Btn.Left | Btn.Right }, { buttons: 0 }] });
-    expect(w.players[0]!.pos.x).toBe(x0);
+    w.players[0]!.pos.x = STAGE_LEFT_X + 4;
+    for (let i = 0; i < 30; i++) tick(w, characters, p1Left);
+    expect(w.players[0]!.pos.x).toBe(STAGE_LEFT_X);
   });
 
-  test('determinism — same world + same inputs produce identical results across runs', () => {
+  test('jump rises then falls then returns to stand', () => {
+    const w = createWorld();
+    tick(w, characters, p1Up);
+    expect(w.players[0]!.stateId).toBe('jump');
+    expect(w.players[0]!.pos.y).toBeGreaterThan(0);
+
+    for (let i = 0; i < 200; i++) {
+      tick(w, characters, noInput);
+      if (w.players[0]!.stateId === 'stand') break;
+    }
+    expect(w.players[0]!.stateId).toBe('stand');
+    expect(w.players[0]!.pos.y).toBe(0);
+  });
+
+  test('determinism — two parallel runs with same inputs match exactly', () => {
+    const a = createWorld();
+    const b = createWorld();
     const seq: Inputs[] = [
       p1Right,
       p1Right,
       noInput,
-      { players: [{ buttons: 0 }, { buttons: Btn.Left }] },
+      p1Up,
+      noInput,
+      noInput,
+      noInput,
       p1Left,
+      noInput,
     ];
-    const a = createWorld();
-    const b = createWorld();
     for (const inp of seq) {
-      tick(a, inp);
-      tick(b, inp);
+      tick(a, characters, inp);
+      tick(b, characters, inp);
     }
     expect(a).toEqual(b);
   });

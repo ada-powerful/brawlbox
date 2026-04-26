@@ -1,0 +1,106 @@
+{
+  "meta": {
+    "id": "base",
+    "name": "Base",
+    "author": "ftg",
+    "version": "0.1.0"
+  },
+  "data": {
+    "life": 1000,
+    "attack": 100,
+    "defence": 100,
+    "walkFwd": 3,
+    "walkBack": -2.4,
+    "jumpVel": { "x": 0, "y": 9 },
+    "gravity": 0.5,
+    "groundFriction": 0.85
+  },
+  "size": {
+    "width": 60,
+    "height": 100,
+    "headY": 92
+  },
+  "states": {
+    "stand": {
+      "type": "S",
+      "moveType": "I",
+      "physics": "S",
+      "ctrl": 1,
+      "velSet": { "x": 0 },
+      "controllers": [
+        {
+          "type": "ChangeState",
+          "value": "walk",
+          "trigger": {
+            "op": "or",
+            "args": [
+              { "op": "button", "held": "left" },
+              { "op": "button", "held": "right" }
+            ]
+          }
+        },
+        {
+          "type": "ChangeState",
+          "value": "jump",
+          "trigger": { "op": "button", "held": "up" }
+        }
+      ]
+    },
+    "walk": {
+      "type": "S",
+      "moveType": "I",
+      "physics": "N",
+      "ctrl": 1,
+      "controllers": [
+        {
+          "type": "VelSet",
+          "x": 3,
+          "trigger": { "op": "button", "held": "right" }
+        },
+        {
+          "type": "VelSet",
+          "x": -2.4,
+          "trigger": { "op": "button", "held": "left" }
+        },
+        {
+          "type": "ChangeState",
+          "value": "stand",
+          "trigger": {
+            "op": "and",
+            "args": [
+              { "op": "not", "arg": { "op": "button", "held": "left" } },
+              { "op": "not", "arg": { "op": "button", "held": "right" } }
+            ]
+          }
+        },
+        {
+          "type": "ChangeState",
+          "value": "jump",
+          "trigger": { "op": "button", "held": "up" }
+        }
+      ]
+    },
+    "jump": {
+      "type": "A",
+      "moveType": "I",
+      "physics": "A",
+      "velSet": { "y": 9 },
+      "ctrl": 0,
+      "controllers": [
+        {
+          "type": "ChangeState",
+          "value": "stand",
+          "ctrl": 1,
+          "trigger": {
+            "op": "and",
+            "args": [
+              { "op": "le", "left": { "ref": "pos.y" }, "right": { "const": 0 } },
+              { "op": "le", "left": { "ref": "vel.y" }, "right": { "const": 0 } },
+              { "op": "gt", "left": { "ref": "time" }, "right": { "const": 0 } }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}
