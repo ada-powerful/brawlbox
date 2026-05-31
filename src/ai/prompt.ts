@@ -10,7 +10,7 @@ import type { GenSpec } from './types.ts';
  * procedural renderer keep working (real sprites land in M2.2).
  */
 export function buildSystemPrompt(template: unknown): string {
-  return `You are a fighting-game character designer for the "ftg" engine. You output ONE JSON object describing a complete, playable character. Output ONLY JSON — no prose, no markdown fences.
+  return `You are a fighting-game character designer for the "BrawlBox" engine. You output ONE JSON object describing a complete, playable character. Output ONLY JSON — no prose, no markdown fences.
 
 The engine is MUGEN-like. Key rules you MUST follow:
 

@@ -194,9 +194,13 @@ jobs:
 ## 9. Next-session task list (priority order)
 
 1. **Finish the GoDaddy NS change** (user) and confirm `brawlbox.gg` is Active in Cloudflare.
-2. **Repos**: rename `ftg` → `brawlbox-web`; rebrand strings; create empty `ada-powerful/brawlbox-api` and `ada-powerful/brawlbox-infra`.
+2. ✅ **DONE (2026-05-31)** **Repos** (all **private**). GitHub `ftg` renamed → `ada-powerful/brawlbox-web` (history + redirects kept; local `origin` updated; local dir stays `/home/tq/repos/ftg`). Created empty `ada-powerful/brawlbox-api`, and `ada-powerful/brawlbox-infra` (infra scaffold pushed, default branch `main`). User-facing strings rebranded `ftg`→BrawlBox (title, `package.json` name, creator header, system prompt, base char author). **Left intentionally**: localStorage key `ftg.apiKey.openai` + IndexedDB name `ftg` (renaming orphans users' saved key/characters); internal `FtgDB` type + historical doc references. GH Actions secrets set: `AWS_INFRA_ROLE_ARN` (brawlbox-infra), `AWS_API_ROLE_ARN` (brawlbox-api); `prod` env created but **can't enforce required reviewers on the free plan** → infra `apply` switched to manual `workflow_dispatch` as the gate.
 3. **Cloudflare Pages**: connect `brawlbox-web`, deploy, attach `brawlbox.gg` + `www`. Confirm the live site. Add the web CI/CD workflow (§8).
-4. **Terraform bootstrap**: in `brawlbox-infra`, create the state bucket + lock table (§8), then the OIDC provider + per-repo deploy roles. Wire the infra `plan`/`apply` workflow.
+4. ✅ **DONE (2026-05-31)** **Terraform bootstrap**. State bucket `brawlbox-tfstate-180970910446` (versioned, encrypted, public-access blocked) + `brawlbox-tflock` DynamoDB lock created via CLI. `brawlbox-infra` Terraform scaffolded **locally at `/home/tq/repos/brawlbox-infra`** (git-initialized, 1 commit, **not yet pushed** — needs the empty GitHub repo from task #2) and applied. Created OIDC deploy roles:
+   - `arn:aws:iam::180970910446:role/brawlbox-infra-deploy` (AdministratorAccess) → GH secret `AWS_INFRA_ROLE_ARN`
+   - `arn:aws:iam::180970910446:role/brawlbox-api-deploy` (S3 writes to `brawlbox-artifacts-180970910446`) → GH secret `AWS_API_ROLE_ARN`
+   - The GitHub OIDC **provider already existed** account-wide; it's referenced as a data source, not created. `brawlbox-web` has no AWS role (Cloudflare-only).
+   - Infra `plan`(PR)/`apply`(main, protected `prod` env) workflow committed. Remaining: push the repo (task #2), set the two GH secrets, create the `prod` environment.
 5. **brawlbox-api + infra scaffold**: HTTP API + health lambda (artifact → S3 → Terraform), custom domain `api.brawlbox.gg` (ACM regional cert + Cloudflare CNAME). Add the api build/artifact workflow.
 6. **Secrets proxy**: Secrets Manager (openai, fal); implement `/generate/character` + `/generate/sprites`; point the frontend `ai/` clients at the API (keep BYOK behind a flag).
 7. **Cognito auth**: user pool + Google + Facebook IdPs (create the OAuth apps per §5), JWT authorizer on the API, login UI in the frontend.

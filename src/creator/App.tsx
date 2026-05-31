@@ -96,7 +96,9 @@ export function App() {
       swapAtlasUrl(undefined); // new config => drop old sprites
       setCharacter(result.character);
       setJson(JSON.stringify(result.character, null, 2));
-      setStatus(`Valid character generated in ${result.attempts} attempt(s). Now generate sprites.`);
+      setStatus(
+        `Valid character generated in ${result.attempts} attempt(s). Now generate sprites.`,
+      );
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -173,7 +175,7 @@ export function App() {
     <div className="mx-auto flex min-h-screen max-w-[1400px] flex-col gap-4 p-4">
       <header className="flex items-baseline justify-between">
         <h1 className="text-xl font-semibold tracking-tight">
-          ftg <span className="text-muted-foreground">character creator</span>
+          BrawlBox <span className="text-muted-foreground">character creator</span>
         </h1>
         <span className="text-xs text-muted-foreground">
           {ENV_KEY ? 'key loaded from .env' : 'M2.2 — AI sprite generation'}
@@ -210,7 +212,7 @@ export function App() {
                   />
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Sent only to api.openai.com, never to any ftg server.
+                  Sent only to api.openai.com, never to any BrawlBox server.
                 </p>
               </CardContent>
             </Card>
