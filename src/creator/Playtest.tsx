@@ -5,10 +5,17 @@ import { BASE_ATLAS_URL, BASE_CHARACTER, P1_COLOR, P2_COLOR } from '@/creator/de
 
 /**
  * Runs a live match: base character (P1, with sprites) vs. the supplied
- * character (P2). When `character` is null it's a base-vs-base sparring demo.
- * Generated characters have no atlas yet (M2.2), so they render procedurally.
+ * character (P2). null `character` => base-vs-base sparring. A generated
+ * character renders procedurally until `atlasUrl` is supplied (post-M2.2 sprite
+ * generation), at which point it uses its real atlas.
  */
-export function Playtest({ character }: { character: Character | null }) {
+export function Playtest({
+  character,
+  atlasUrl,
+}: {
+  character: Character | null;
+  atlasUrl?: string;
+}) {
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -25,13 +32,11 @@ export function Playtest({ character }: { character: Character | null }) {
         : character
       : BASE_CHARACTER;
 
+    const p2Atlas = character ? atlasUrl : BASE_ATLAS_URL;
+
     mountGame(mount, {
       p1: { character: BASE_CHARACTER, atlasUrl: BASE_ATLAS_URL, color: P1_COLOR },
-      p2: {
-        character: opponent,
-        atlasUrl: character ? undefined : BASE_ATLAS_URL,
-        color: P2_COLOR,
-      },
+      p2: { character: opponent, atlasUrl: p2Atlas, color: P2_COLOR },
     })
       .then((h) => {
         if (disposed) h.destroy();
@@ -43,7 +48,7 @@ export function Playtest({ character }: { character: Character | null }) {
       disposed = true;
       handle?.destroy();
     };
-  }, [character]);
+  }, [character, atlasUrl]);
 
   return <div ref={ref} className="overflow-hidden rounded-lg border" />;
 }

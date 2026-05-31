@@ -7,7 +7,11 @@ import { Switch } from '@/components/ui/switch.tsx';
 import { Textarea } from '@/components/ui/textarea.tsx';
 import { generateCharacter } from '@/ai/llm.ts';
 import { createOpenAIProvider } from '@/ai/openai.ts';
+import { generateCharacterSprites } from '@/ai/image.ts';
 import { clearKey, getEnvKey, getKey, setKey } from '@/ai/keystore.ts';
+import { applySpritesToCharacter } from '@/creator/image/pack.ts';
+import { packSprites } from '@/creator/image/packAtlas.ts';
+import { listCharacters, saveCharacter, type StoredCharacter } from '@/creator/store/db.ts';
 import type { Character } from '@/engine/schema.ts';
 import { Playtest } from '@/creator/Playtest.tsx';
 
@@ -15,26 +19,52 @@ const EXAMPLE = 'a stone golem brawler with a slow, heavy uppercut and lots of h
 
 // A key from .env (if any) takes over — the manual key card is then hidden.
 const ENV_KEY = getEnvKey();
+// Image model; the project validated gpt-image-2. Override with VITE_IMAGE_MODEL.
+const IMAGE_MODEL = (import.meta.env?.VITE_IMAGE_MODEL as string | undefined) || 'gpt-image-1';
 
 export function App() {
   const [apiKey, setApiKey] = useState('');
   const [remember, setRemember] = useState(false);
   const [prompt, setPrompt] = useState(EXAMPLE);
   const [busy, setBusy] = useState(false);
+  const [imgBusy, setImgBusy] = useState(false);
+  const [imgProgress, setImgProgress] = useState<{ done: number; total: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [character, setCharacter] = useState<Character | null>(null);
+  const [atlasUrl, setAtlasUrl] = useState<string | undefined>(undefined);
   const [json, setJson] = useState('');
+  const [model, setModel] = useState(IMAGE_MODEL);
+  const [saved, setSaved] = useState<StoredCharacter[]>([]);
 
   // Hydrate any persisted key on first load (skipped when .env provides one).
   useEffect(() => {
-    if (ENV_KEY) return;
-    const k = getKey();
-    if (k) {
-      setApiKey(k);
-      setRemember(true);
+    if (!ENV_KEY) {
+      const k = getKey();
+      if (k) {
+        setApiKey(k);
+        setRemember(true);
+      }
     }
+    void refreshSaved();
   }, []);
+
+  const refreshSaved = async (): Promise<void> => {
+    try {
+      setSaved(await listCharacters());
+    } catch {
+      /* IndexedDB unavailable — non-fatal */
+    }
+  };
+
+  const resolveKey = (): string | null => {
+    const key = ENV_KEY ?? apiKey.trim();
+    if (!key) {
+      setError('Enter an OpenAI API key first.');
+      return null;
+    }
+    return key;
+  };
 
   const persistKey = (key: string, persist: boolean): void => {
     setApiKey(key);
@@ -42,14 +72,19 @@ export function App() {
     else clearKey();
   };
 
+  // Swap in a new atlas object URL, revoking the previous one.
+  const swapAtlasUrl = (next: string | undefined): void => {
+    setAtlasUrl((prev) => {
+      if (prev && prev !== next) URL.revokeObjectURL(prev);
+      return next;
+    });
+  };
+
   const generate = async (): Promise<void> => {
     setError(null);
     setStatus(null);
-    const key = ENV_KEY ?? apiKey.trim();
-    if (!key) {
-      setError('Enter an OpenAI API key first.');
-      return;
-    }
+    const key = resolveKey();
+    if (!key) return;
     if (!prompt.trim()) {
       setError('Describe the character you want.');
       return;
@@ -58,14 +93,62 @@ export function App() {
     try {
       const provider = createOpenAIProvider(key);
       const result = await generateCharacter({ prompt: prompt.trim() }, provider);
+      swapAtlasUrl(undefined); // new config => drop old sprites
       setCharacter(result.character);
       setJson(JSON.stringify(result.character, null, 2));
-      setStatus(`Valid character generated in ${result.attempts} attempt(s).`);
+      setStatus(`Valid character generated in ${result.attempts} attempt(s). Now generate sprites.`);
     } catch (e) {
       setError((e as Error).message);
     } finally {
       setBusy(false);
     }
+  };
+
+  const generateSprites = async (): Promise<void> => {
+    if (!character) return;
+    setError(null);
+    setStatus(null);
+    const key = resolveKey();
+    if (!key) return;
+    setImgBusy(true);
+    setImgProgress({ done: 0, total: 0 });
+    try {
+      const images = await generateCharacterSprites(character, prompt.trim(), key, {
+        model,
+        onProgress: (done, total) => setImgProgress({ done, total }),
+      });
+      const packed = await packSprites(images);
+      const sprited = applySpritesToCharacter(
+        character,
+        `${character.meta.id}/atlas.png`,
+        packed.frames,
+        packed.hurtboxes,
+      );
+      swapAtlasUrl(URL.createObjectURL(packed.atlasBlob));
+      setCharacter(sprited);
+      setJson(JSON.stringify(sprited, null, 2));
+      await saveCharacter({
+        id: sprited.meta.id,
+        name: sprited.meta.name,
+        character: sprited,
+        atlas: packed.atlasBlob,
+        createdAt: Date.now(),
+      });
+      await refreshSaved();
+      setStatus('Sprites generated and saved locally.');
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setImgBusy(false);
+      setImgProgress(null);
+    }
+  };
+
+  const loadSaved = (rec: StoredCharacter): void => {
+    swapAtlasUrl(URL.createObjectURL(rec.atlas));
+    setCharacter(rec.character);
+    setJson(JSON.stringify(rec.character, null, 2));
+    setStatus(`Loaded "${rec.name}" from local storage (offline).`);
   };
 
   const download = (): void => {
@@ -78,6 +161,8 @@ export function App() {
     URL.revokeObjectURL(url);
   };
 
+  const hasSprites = Boolean(atlasUrl);
+
   return (
     <div className="mx-auto flex min-h-screen max-w-[1400px] flex-col gap-4 p-4">
       <header className="flex items-baseline justify-between">
@@ -85,7 +170,7 @@ export function App() {
           ftg <span className="text-muted-foreground">character creator</span>
         </h1>
         <span className="text-xs text-muted-foreground">
-          {ENV_KEY ? 'key loaded from .env' : 'M2.1 — BYOK config generation'}
+          {ENV_KEY ? 'key loaded from .env' : 'M2.2 — AI sprite generation'}
         </span>
       </header>
 
@@ -136,13 +221,63 @@ export function App() {
                 onChange={(e) => setPrompt(e.target.value)}
                 placeholder={EXAMPLE}
               />
-              <Button onClick={generate} disabled={busy}>
-                {busy ? 'Generating…' : 'Generate character'}
+              <Button onClick={generate} disabled={busy || imgBusy}>
+                {busy ? 'Generating…' : '1 · Generate character'}
               </Button>
+
+              {character && (
+                <>
+                  <div className="flex items-center gap-2">
+                    <Label htmlFor="model" className="text-muted-foreground whitespace-nowrap">
+                      Image model
+                    </Label>
+                    <Input
+                      id="model"
+                      value={model}
+                      onChange={(e) => setModel(e.target.value)}
+                      className="h-8"
+                    />
+                  </div>
+                  <Button variant="secondary" onClick={generateSprites} disabled={busy || imgBusy}>
+                    {imgBusy
+                      ? `Generating sprites… ${imgProgress?.done ?? 0}/${imgProgress?.total ?? '?'}`
+                      : hasSprites
+                        ? '2 · Regenerate sprites'
+                        : '2 · Generate sprites'}
+                  </Button>
+                  <p className="text-xs text-muted-foreground">
+                    Sprite generation makes one image API call per animation frame (billed to your
+                    key). Takes a minute or two.
+                  </p>
+                </>
+              )}
+
               {error && <p className="text-sm text-destructive">{error}</p>}
               {status && <p className="text-sm text-primary">{status}</p>}
             </CardContent>
           </Card>
+
+          {saved.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Saved locally</CardTitle>
+              </CardHeader>
+              <CardContent className="flex flex-col gap-2">
+                {saved.map((rec) => (
+                  <Button
+                    key={rec.id}
+                    variant="outline"
+                    size="sm"
+                    className="justify-start"
+                    onClick={() => loadSaved(rec)}
+                  >
+                    {rec.name}
+                  </Button>
+                ))}
+                <p className="text-xs text-muted-foreground">Reloads with no network calls.</p>
+              </CardContent>
+            </Card>
+          )}
 
           {json && (
             <Card className="flex-1">
@@ -170,11 +305,12 @@ export function App() {
             </span>
           </CardHeader>
           <CardContent>
-            <Playtest character={character} />
+            <Playtest character={character} atlasUrl={atlasUrl} />
             <p className="mt-2 text-xs text-muted-foreground">
-              Pink = base (P1). Blue = {character ? 'your generated fighter' : 'base'} (P2).
+              Pink = base (P1). Blue = {character ? 'your fighter' : 'base'} (P2).
               {character &&
-                ' Generated fighters render as silhouettes until sprites are added (M2.2).'}
+                !hasSprites &&
+                ' Renders as a silhouette until you generate sprites (step 2).'}
             </p>
           </CardContent>
         </Card>
