@@ -20,6 +20,22 @@
     "height": 100,
     "headY": 92
   },
+  "spriteAtlas": {
+    "url": "characters/base/atlas.png",
+    "frames": {
+      "stand": { "x": 0, "y": 0, "w": 80, "h": 120 },
+      "walk-0": { "x": 80, "y": 0, "w": 80, "h": 120 },
+      "walk-1": { "x": 160, "y": 0, "w": 80, "h": 120 },
+      "jump-rise": { "x": 240, "y": 0, "w": 80, "h": 120 },
+      "jump-fall": { "x": 0, "y": 120, "w": 80, "h": 120 },
+      "punch-startup": { "x": 80, "y": 120, "w": 80, "h": 120 },
+      "punch-active": { "x": 160, "y": 120, "w": 80, "h": 120 },
+      "punch-recovery": { "x": 240, "y": 120, "w": 80, "h": 120 },
+      "hit-stand": { "x": 0, "y": 240, "w": 80, "h": 120 },
+      "hit-air": { "x": 80, "y": 240, "w": 80, "h": 120 },
+      "ko": { "x": 160, "y": 240, "w": 80, "h": 120 }
+    }
+  },
   "animations": {
     "stand": {
       "loop": false,

@@ -1,7 +1,9 @@
-import { Graphics } from 'pixi.js';
+import { Container, Graphics, Sprite, type Texture } from 'pixi.js';
+import type { Character } from '../engine/schema.ts';
 import type { Player } from '../engine/world.ts';
 import { GROUND_Y_SCREEN } from '../engine/world.ts';
 import { lerp } from '../engine/vec.ts';
+import { animFrameAt } from '../runtime/atlas.ts';
 
 interface FrameShape {
   w: number;
@@ -34,24 +36,61 @@ function frameShape(animId: string, frame: number, baseColor: number): FrameShap
   }
 }
 
+export interface FighterRendererOpts {
+  /** When both are provided, render real atlas sprites; otherwise fall back to procedural shapes. */
+  character?: Character;
+  textures?: Record<string, Texture>;
+}
+
+/**
+ * Draws one fighter. Sprite-backed when an atlas is supplied (M2.0+), otherwise
+ * the phase-1 procedural silhouette. The active display object is `view`.
+ */
 export class FighterRenderer {
-  readonly gfx: Graphics;
+  readonly view: Container;
   private readonly baseColor: number;
+
+  // Sprite path.
+  private readonly sprite?: Sprite;
+  private readonly character?: Character;
+  private readonly textures?: Record<string, Texture>;
+
+  // Procedural fallback path.
+  private readonly gfx?: Graphics;
+
   private lastAnim = '';
   private lastFrame = -1;
 
-  constructor(color: number) {
-    this.gfx = new Graphics();
+  constructor(color: number, opts: FighterRendererOpts = {}) {
     this.baseColor = color;
+    if (opts.character && opts.textures) {
+      this.character = opts.character;
+      this.textures = opts.textures;
+      this.sprite = new Sprite();
+      this.sprite.anchor.set(0.5, 1); // feet-center, matches world feet anchor
+      this.sprite.tint = color; // white silhouettes tint to the player's color
+      this.view = this.sprite;
+    } else {
+      this.gfx = new Graphics();
+      this.view = this.gfx;
+    }
     this.drawFrame('stand', 0);
   }
 
   private drawFrame(animId: string, frame: number): void {
+    if (this.sprite && this.character && this.textures) {
+      const af = animFrameAt(this.character, animId, frame);
+      const tex = af ? this.textures[af.sprite] : undefined;
+      if (tex) this.sprite.texture = tex;
+      return;
+    }
+    const g = this.gfx;
+    if (!g) return;
     const { w, h, leanX, color } = frameShape(animId, frame, this.baseColor);
-    this.gfx.clear();
-    this.gfx
-      .poly([-w / 2 + leanX, -h, w / 2 + leanX, -h, w / 2 - leanX, 0, -w / 2 - leanX, 0])
-      .fill({ color });
+    g.clear();
+    g.poly([-w / 2 + leanX, -h, w / 2 + leanX, -h, w / 2 - leanX, 0, -w / 2 - leanX, 0]).fill({
+      color,
+    });
   }
 
   update(prev: Player, curr: Player, alpha: number): void {
@@ -62,8 +101,8 @@ export class FighterRenderer {
     }
     const x = lerp(prev.pos.x, curr.pos.x, alpha);
     const y = lerp(prev.pos.y, curr.pos.y, alpha);
-    this.gfx.x = x;
-    this.gfx.y = GROUND_Y_SCREEN - y;
-    this.gfx.scale.x = curr.facing;
+    this.view.x = x;
+    this.view.y = GROUND_Y_SCREEN - y;
+    this.view.scale.x = curr.facing;
   }
 }

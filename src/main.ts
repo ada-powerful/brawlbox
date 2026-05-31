@@ -1,4 +1,5 @@
 import baseChar from '../characters/base/character.json' with { type: 'json' };
+import baseAtlasUrl from '../characters/base/atlas.png';
 import { tick } from './engine/tick.ts';
 import { parseCharacter } from './engine/schema.ts';
 import { createWorld } from './engine/world.ts';
@@ -8,21 +9,31 @@ import { DebugOverlay } from './render/debug.ts';
 import { FighterRenderer } from './render/fighter.ts';
 import { HealthBars, MatchOverlay } from './render/hud.ts';
 import { createStage } from './render/stage.ts';
+import { assertAtlasCoverage } from './runtime/atlas.ts';
+import { loadAtlasTextures } from './runtime/assets.ts';
 import { startLoop } from './runtime/loop.ts';
 
 async function main(): Promise<void> {
   const mount = document.getElementById('app');
   if (!mount) throw new Error('mount #app missing');
 
-  const characters = { base: parseCharacter(baseChar) };
+  const base = parseCharacter(baseChar);
+  assertAtlasCoverage(base);
+  const characters = { base };
 
   const app = await startApp(mount);
   app.stage.addChild(createStage());
 
-  const p1 = new FighterRenderer(0xff5577);
-  const p2 = new FighterRenderer(0x55aaff);
-  app.stage.addChild(p1.gfx);
-  app.stage.addChild(p2.gfx);
+  // Load real sprites if the character declares an atlas; otherwise the
+  // renderer falls back to procedural shapes.
+  const textures = base.spriteAtlas
+    ? await loadAtlasTextures(baseAtlasUrl, base.spriteAtlas.frames)
+    : undefined;
+
+  const p1 = new FighterRenderer(0xff5577, { character: base, textures });
+  const p2 = new FighterRenderer(0x55aaff, { character: base, textures });
+  app.stage.addChild(p1.view);
+  app.stage.addChild(p2.view);
 
   const healthBars = new HealthBars();
   app.stage.addChild(healthBars.gfx);
