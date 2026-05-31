@@ -5,16 +5,34 @@
 import type { Character } from '../engine/schema.ts';
 import { collectReferencedSprites } from '../runtime/atlas.ts';
 
+export type BackgroundMode = 'transparent' | 'chroma';
+
+/** Chroma-key color used when a model can't emit a transparent background. */
+export const CHROMA = { r: 0xff, g: 0x00, b: 0xff }; // magenta — rare in characters
+const CHROMA_HEX = '#FF00FF';
+
 export interface ImageGenOptions {
-  /** Image model. The project validated gpt-image-2; gpt-image-1 also works. */
+  /** Image model. Defaults to gpt-image-2; gpt-image-1 also works. */
   model?: string;
   size?: '1024x1024' | '1024x1536' | '1536x1024' | 'auto';
   baseUrl?: string;
   fetchImpl?: typeof fetch;
   /** Visual style hint, e.g. "inked comic", "pixel art". */
   style?: string;
+  /**
+   * How the cutout is produced. 'transparent' uses the API's transparent
+   * background (gpt-image-1). 'chroma' generates on a flat magenta backdrop to
+   * be keyed out client-side (gpt-image-2, which rejects transparent). Defaults
+   * to `defaultBackgroundForModel(model)`.
+   */
+  background?: BackgroundMode;
   /** Called after each frame so the UI can show progress. */
   onProgress?: (done: number, total: number, key: string) => void;
+}
+
+/** gpt-image-1 supports transparent output; other models get chroma-keyed. */
+export function defaultBackgroundForModel(model: string): BackgroundMode {
+  return model.includes('gpt-image-1') ? 'transparent' : 'chroma';
 }
 
 interface ImagesResponse {
@@ -41,12 +59,17 @@ function posePrompt(key: string): string {
   return POSE[key] ?? `${key.replace(/[-.]/g, ' ')} pose`;
 }
 
-function basePrompt(description: string, style: string | undefined): string {
+function basePrompt(description: string, style: string | undefined, bg: BackgroundMode): string {
   const styleLine = style ? ` Art style: ${style}.` : '';
+  const bgLine =
+    bg === 'transparent'
+      ? ' Transparent background.'
+      : ` Place the character on a solid flat ${CHROMA_HEX} magenta background that completely fills the frame; do not use this magenta anywhere on the character itself.`;
   return (
     `2D fighting-game character sprite of ${description}.${styleLine}` +
-    ' Full body, facing right, centered in frame, feet at the bottom edge,' +
-    ' transparent background, clean flat colors, crisp outline, no drop shadow, no ground, no text.'
+    ' Full body, facing right, centered in frame, feet at the bottom edge.' +
+    bgLine +
+    ' Clean flat colors, crisp outline, no drop shadow, no ground, no text.'
   );
 }
 
@@ -63,23 +86,25 @@ function firstImage(json: ImagesResponse): Blob {
   return b64ToBlob(b64);
 }
 
+type ResolvedOpts = Required<
+  Pick<ImageGenOptions, 'model' | 'size' | 'baseUrl' | 'fetchImpl' | 'background'>
+>;
+
 /** Generate the reference frame from scratch. */
-async function generate(
-  apiKey: string,
-  prompt: string,
-  opts: Required<Pick<ImageGenOptions, 'model' | 'size' | 'baseUrl' | 'fetchImpl'>>,
-): Promise<Blob> {
+async function generate(apiKey: string, prompt: string, opts: ResolvedOpts): Promise<Blob> {
+  const body: Record<string, unknown> = {
+    model: opts.model,
+    prompt,
+    size: opts.size,
+    output_format: 'png',
+    n: 1,
+  };
+  if (opts.background === 'transparent') body.background = 'transparent';
+
   const res = await opts.fetchImpl(`${opts.baseUrl}/images/generations`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-    body: JSON.stringify({
-      model: opts.model,
-      prompt,
-      size: opts.size,
-      background: 'transparent',
-      output_format: 'png',
-      n: 1,
-    }),
+    body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error(`Image generation failed (${res.status}): ${await res.text()}`);
   return firstImage((await res.json()) as ImagesResponse);
@@ -90,13 +115,13 @@ async function edit(
   apiKey: string,
   reference: Blob,
   prompt: string,
-  opts: Required<Pick<ImageGenOptions, 'model' | 'size' | 'baseUrl' | 'fetchImpl'>>,
+  opts: ResolvedOpts,
 ): Promise<Blob> {
   const form = new FormData();
   form.append('model', opts.model);
   form.append('prompt', prompt);
   form.append('size', opts.size);
-  form.append('background', 'transparent');
+  if (opts.background === 'transparent') form.append('background', 'transparent');
   form.append('output_format', 'png');
   form.append('n', '1');
   form.append('image', reference, 'reference.png');
@@ -124,14 +149,18 @@ export async function generateCharacterSprites(
   const keys = collectReferencedSprites(character);
   if (keys.length === 0) throw new Error('Character has no sprites to generate');
 
-  const opts = {
-    model: options.model ?? 'gpt-image-1',
+  const model = options.model ?? 'gpt-image-2';
+  const opts: ResolvedOpts = {
+    model,
     size: options.size ?? '1024x1024',
     baseUrl: options.baseUrl ?? 'https://api.openai.com/v1',
-    fetchImpl: options.fetchImpl ?? fetch,
-  } as const;
+    background: options.background ?? defaultBackgroundForModel(model),
+    // Bind so it stays callable as opts.fetchImpl(...) — an unbound window.fetch
+    // invoked as a method throws "Illegal invocation".
+    fetchImpl: (options.fetchImpl ?? fetch).bind(globalThis),
+  };
 
-  const preamble = basePrompt(description, options.style);
+  const preamble = basePrompt(description, options.style, opts.background);
   const refKey = keys.includes('stand') ? 'stand' : keys[0]!;
 
   const out: Record<string, Blob> = {};

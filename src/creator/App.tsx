@@ -7,7 +7,7 @@ import { Switch } from '@/components/ui/switch.tsx';
 import { Textarea } from '@/components/ui/textarea.tsx';
 import { generateCharacter } from '@/ai/llm.ts';
 import { createOpenAIProvider } from '@/ai/openai.ts';
-import { generateCharacterSprites } from '@/ai/image.ts';
+import { CHROMA, defaultBackgroundForModel, generateCharacterSprites } from '@/ai/image.ts';
 import { clearKey, getEnvKey, getKey, setKey } from '@/ai/keystore.ts';
 import { applySpritesToCharacter } from '@/creator/image/pack.ts';
 import { packSprites } from '@/creator/image/packAtlas.ts';
@@ -20,7 +20,7 @@ const EXAMPLE = 'a stone golem brawler with a slow, heavy uppercut and lots of h
 // A key from .env (if any) takes over — the manual key card is then hidden.
 const ENV_KEY = getEnvKey();
 // Image model; the project validated gpt-image-2. Override with VITE_IMAGE_MODEL.
-const IMAGE_MODEL = (import.meta.env?.VITE_IMAGE_MODEL as string | undefined) || 'gpt-image-1';
+const IMAGE_MODEL = (import.meta.env?.VITE_IMAGE_MODEL as string | undefined) || 'gpt-image-2';
 
 export function App() {
   const [apiKey, setApiKey] = useState('');
@@ -113,11 +113,17 @@ export function App() {
     setImgBusy(true);
     setImgProgress({ done: 0, total: 0 });
     try {
+      const background = defaultBackgroundForModel(model);
       const images = await generateCharacterSprites(character, prompt.trim(), key, {
         model,
+        background,
         onProgress: (done, total) => setImgProgress({ done, total }),
       });
-      const packed = await packSprites(images);
+      // gpt-image-2 can't emit transparency — key out the magenta backdrop here.
+      const packed = await packSprites(
+        images,
+        background === 'chroma' ? { chromaKey: CHROMA } : {},
+      );
       const sprited = applySpritesToCharacter(
         character,
         `${character.meta.id}/atlas.png`,

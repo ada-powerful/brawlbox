@@ -16,7 +16,7 @@ interface ChatCompletion {
 export function createOpenAIProvider(apiKey: string, opts: OpenAIOptions = {}): ChatProvider {
   const model = opts.model ?? 'gpt-4o';
   const baseUrl = opts.baseUrl ?? 'https://api.openai.com/v1';
-  const doFetch = opts.fetchImpl ?? fetch;
+  const doFetch = (opts.fetchImpl ?? fetch).bind(globalThis);
 
   return async (messages) => {
     const res = await doFetch(`${baseUrl}/chat/completions`, {

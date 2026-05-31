@@ -1,5 +1,9 @@
 import { describe, expect, test } from 'vitest';
-import { alphaBoundingBox, pixelBoxToLocalAABB } from '../src/creator/image/alpha.ts';
+import {
+  alphaBoundingBox,
+  keyOutChroma,
+  pixelBoxToLocalAABB,
+} from '../src/creator/image/alpha.ts';
 
 /** Build an RGBA buffer of `w`x`h`, opaque white inside `box`, transparent elsewhere. */
 function buffer(w: number, h: number, box: { x: number; y: number; w: number; h: number }) {
@@ -40,6 +44,30 @@ describe('alphaBoundingBox', () => {
     const solid = (2 * 4 + 3) * 4;
     data[solid + 3] = 200;
     expect(alphaBoundingBox(data, 4, 4, 16)).toEqual({ x: 3, y: 2, w: 1, h: 1 });
+  });
+});
+
+describe('keyOutChroma', () => {
+  const MAGENTA = { r: 255, g: 0, b: 255 };
+
+  test('zeroes alpha on background pixels, keeps the subject', () => {
+    // 2 px: one magenta bg (opaque), one brown character (opaque)
+    const data = new Uint8ClampedArray([255, 0, 255, 255, 120, 80, 40, 255]);
+    keyOutChroma(data, MAGENTA);
+    expect(data[3]).toBe(0); // bg keyed out
+    expect(data[7]).toBe(255); // character untouched
+  });
+
+  test('tolerance catches near-key anti-aliased pixels', () => {
+    const data = new Uint8ClampedArray([245, 10, 245, 255]); // slightly off magenta
+    keyOutChroma(data, MAGENTA, 60);
+    expect(data[3]).toBe(0);
+  });
+
+  test('a color far from the key is preserved', () => {
+    const data = new Uint8ClampedArray([0, 200, 0, 255]); // green
+    keyOutChroma(data, MAGENTA, 120);
+    expect(data[3]).toBe(255);
   });
 });
 

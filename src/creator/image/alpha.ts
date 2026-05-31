@@ -9,6 +9,31 @@ export interface PixelBox {
   h: number;
 }
 
+export interface RGB {
+  r: number;
+  g: number;
+  b: number;
+}
+
+/**
+ * Make pixels matching a chroma-key color transparent, in place. Used to cut
+ * out a flat backdrop from models that can't emit a transparent background.
+ * `tolerance` is a squared-distance radius in RGB space.
+ */
+export function keyOutChroma(
+  rgba: Uint8ClampedArray | Uint8Array | number[],
+  color: RGB,
+  tolerance = 120,
+): void {
+  const tol2 = tolerance * tolerance;
+  for (let i = 0; i < rgba.length; i += 4) {
+    const dr = (rgba[i] ?? 0) - color.r;
+    const dg = (rgba[i + 1] ?? 0) - color.g;
+    const db = (rgba[i + 2] ?? 0) - color.b;
+    if (dr * dr + dg * dg + db * db <= tol2) rgba[i + 3] = 0;
+  }
+}
+
 /**
  * Tight bounding box of the non-transparent pixels in an RGBA buffer.
  * `rgba` is row-major, 4 bytes/pixel (the shape of ImageData.data).

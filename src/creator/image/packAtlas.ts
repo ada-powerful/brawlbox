@@ -2,7 +2,7 @@
 // body hurtbox per frame from its alpha. The layout + pixel math are imported
 // from the pure (tested) modules; this file only does canvas I/O.
 import type { AABB, FrameRect } from '../../engine/schema.ts';
-import { alphaBoundingBox, pixelBoxToLocalAABB } from './alpha.ts';
+import { alphaBoundingBox, keyOutChroma, pixelBoxToLocalAABB, type RGB } from './alpha.ts';
 import { gridLayout } from './pack.ts';
 
 export interface PackOptions {
@@ -11,6 +11,9 @@ export interface PackOptions {
   cellH?: number;
   /** Alpha cutoff for the hurtbox bounding box. */
   alphaThreshold?: number;
+  /** When set, key out this background color (for non-transparent models). */
+  chromaKey?: RGB;
+  chromaTolerance?: number;
 }
 
 export interface PackedAtlas {
@@ -71,8 +74,13 @@ export async function packSprites(
     ctx.drawImage(bitmap, rect.x, rect.y, cellW, cellH);
     bitmap.close();
 
-    const { data } = ctx.getImageData(rect.x, rect.y, cellW, cellH);
-    const box = alphaBoundingBox(data, cellW, cellH, threshold);
+    const cell = ctx.getImageData(rect.x, rect.y, cellW, cellH);
+    if (options.chromaKey) {
+      keyOutChroma(cell.data, options.chromaKey, options.chromaTolerance ?? 120);
+      ctx.putImageData(cell, rect.x, rect.y); // bake the cutout into the atlas
+    }
+
+    const box = alphaBoundingBox(cell.data, cellW, cellH, threshold);
     // Fall back to the full cell if a frame somehow came back blank.
     hurtboxes[key] = box
       ? pixelBoxToLocalAABB(box, cellW, cellH)
