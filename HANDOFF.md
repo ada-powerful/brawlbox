@@ -5,7 +5,7 @@
 ## 0. TL;DR — where we are
 
 - **Product**: `ftg` (working name) → **BrawlBox**, a browser-native 2D fighting game + AI-assisted character creator. Engine (phase 1) is complete and rollback-ready. Creator (phase 2) is mid-build.
-- **This session's decision**: split the monorepo into **`brawlbox-web`** (frontend) and **`brawlbox-api`** (backend), host the frontend on **Cloudflare Pages**, build the backend as **AWS serverless**, and put the app on **brawlbox.gg**.
+- **This session's decision**: split the monorepo into **`brawlbox-web`** (frontend, Cloudflare Pages), **`brawlbox-api`** (AWS serverless backend), and **`brawlbox-infra`** (**Terraform** for all AWS resources). CI/CD via GitHub Actions on every repo (AWS auth through GitHub OIDC, no static keys). App lives on **brawlbox.gg**.
 - **Domain**: Cloudflare zone for `brawlbox.gg` already exists, status **pending** — waiting on a GoDaddy nameserver change (see §6). Then it auto-activates.
 - **Not yet done**: the actual repo split, any AWS resource creation, the backend code. This doc is the plan; next session executes it.
 
@@ -22,13 +22,14 @@ Single repo `github.com/ada-powerful/ftg`, branch `main`. Stack: TS strict, Vite
 
 ## 2. Repo split plan
 
-| Repo | Contents | Host | CI |
-|---|---|---|---|
-| **brawlbox-web** | current `ftg` minus nothing structural — engine, render, input, runtime, game, creator, ai (clients), components, characters. Rebrand `ftg`→BrawlBox. | Cloudflare Pages | existing GH Actions (typecheck/test/build) |
-| **brawlbox-api** | NEW. AWS serverless backend: auth, secrets/provider proxy, character storage + sharing, preset template serving. | AWS (us-west-2) | GH Actions → CDK deploy |
-| **brawlbox-shared** (optional) | the `Character` Zod schema + shared types, consumed by both. Start by copying `engine/schema.ts`; promote to a package only if drift hurts. | npm/git | — |
+| Repo                           | Contents                                                                                                                                                                                            | Host             | CI/CD                                                                               |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------- | ----------------------------------------------------------------------------------- |
+| **brawlbox-web**               | current `ftg` minus nothing structural — engine, render, input, runtime, game, creator, ai (clients), components, characters. Rebrand `ftg`→BrawlBox.                                               | Cloudflare Pages | GH Actions: typecheck/test/build → Cloudflare Pages deploy                          |
+| **brawlbox-api**               | NEW. App code for the serverless backend: Lambda handlers (auth, secrets/provider proxy, character storage + sharing, preset template serving).                                                     | AWS (us-west-2)  | GH Actions: build/test → upload Lambda artifact to S3 → trigger infra apply         |
+| **brawlbox-infra**             | NEW. **Terraform** for ALL AWS resources (Cognito, API Gateway, Lambda wiring, DynamoDB, S3, Secrets Manager, ACM, IAM + GitHub OIDC roles) + remote state. Single source of truth for cloud infra. | AWS (us-west-2)  | GH Actions: `terraform plan` on PR, `terraform apply` on main (OIDC, env-protected) |
+| **brawlbox-shared** (optional) | the `Character` Zod schema + shared types, consumed by web + api. Start by copying `engine/schema.ts`; promote to a package only if drift hurts.                                                    | npm/git          | —                                                                                   |
 
-Mechanics: the simplest path is **rename `ftg` → `brawlbox-web`** (GitHub repo rename keeps history + remote redirects), then create an empty **`brawlbox-api`** under `ada-powerful`. The engine does NOT move — it's browser code. "Splitting the scope" = the backend is a brand-new codebase, not extracted from existing files.
+Mechanics: **rename `ftg` → `brawlbox-web`** (GitHub repo rename keeps history + remote redirects), then create empty **`brawlbox-api`** and **`brawlbox-infra`** under `ada-powerful`. The engine does NOT move — it's browser code. "Splitting the scope" = the backend + infra are brand-new codebases, not extracted from existing files.
 
 ## 3. Frontend — Cloudflare Pages
 
@@ -56,7 +57,7 @@ Architecture (serverless):
 - **S3**: bucket(s) for atlases, generated sheets, and preset template sheets (template art lives here, NOT in git — copyright). Optionally fronted by CloudFront.
 - **Secrets Manager**: `brawlbox/openai` + `brawlbox/fal` provider keys (migrated out of `.env`). Lambda reads at cold start, caches.
 - **Cognito** (auth) — see §5.
-- **IaC: AWS CDK (TypeScript)** — matches the stack; `cdk bootstrap aws://180970910446/us-west-2 --profile tintin-prod` first. (Terraform is the alternative; CDK recommended for TS parity.)
+- **IaC: Terraform**, all of it in `brawlbox-infra` (§8). Remote state in S3 + DynamoDB lock (one-time bootstrap below). Lambda code is built in `brawlbox-api`, published as a versioned artifact to an S3 bucket, and referenced by Terraform.
 
 ## 5. Auth — Cognito + Google + Facebook
 
@@ -67,21 +68,46 @@ Architecture (serverless):
 - Frontend uses Cognito tokens (JWT) as `Authorization: Bearer` to the API; API Gateway JWT authorizer validates.
 - **`ai/` migration**: today the browser calls OpenAI/fal directly (BYOK). Post-auth, the browser calls `brawlbox-api` with its Cognito token; the lambda holds the provider keys. Keep BYOK as a fallback/dev path behind a flag.
 
+### Creating the Google & Facebook OAuth apps (USER ACTION)
+
+Both need the **Cognito hosted-UI callback** URL. Pick a Cognito domain prefix (e.g. `brawlbox`) so the callback is:
+`https://brawlbox.auth.us-west-2.amazoncognito.com/oauth2/idpresponse`
+(Decide the prefix in Terraform first, or use the default `*.auth.us-west-2.amazoncognito.com`. The same value goes into both providers below.)
+
+**Google** (console.cloud.google.com):
+
+1. Create/select a project → **APIs & Services → OAuth consent screen** → External → fill app name, support email, `brawlbox.gg` as authorized domain.
+2. **Credentials → Create credentials → OAuth client ID → Web application**.
+3. Authorized JavaScript origins: `https://brawlbox.gg`. Authorized redirect URI: the Cognito `…/oauth2/idpresponse` URL above.
+4. Save the **Client ID** + **Client secret** → into Terraform var / Secrets Manager (`brawlbox/google-oauth`).
+
+**Facebook** (developers.facebook.com):
+
+1. **Create App** → type "Consumer" → add the **Facebook Login** product.
+2. Facebook Login → Settings → **Valid OAuth Redirect URIs**: the Cognito `…/oauth2/idpresponse` URL.
+3. App domains: `brawlbox.gg`. Set the app **Live** (not Dev) before public use.
+4. From Settings → Basic, save **App ID** + **App Secret** → Terraform var / Secrets Manager (`brawlbox/facebook-oauth`).
+
+Then in `brawlbox-infra`: add both as Cognito User Pool Identity Providers (`google`, `facebook`), map email/name attributes, and enable them on the SPA app client. Cognito federation needs `email` scope from both.
+
 ## 6. Domain & DNS — brawlbox.gg (Cloudflare)
 
 **Status: Cloudflare zone exists, `pending`.** Cloudflare account id + API token are in `.env` (`CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`). Token is active; it can read zones + edit DNS but **cannot create zones** (zone already created, so fine).
 
 Assigned Cloudflare nameservers:
+
 - `shaz.ns.cloudflare.com`
 - `yichun.ns.cloudflare.com`
 
 **ACTION REQUIRED (user, at GoDaddy):**
+
 1. GoDaddy → My Products → **brawlbox.gg** → **Manage DNS** (or Domain Settings → Nameservers).
 2. Nameservers → **Change** → **"I'll use my own nameservers"**.
 3. Replace GoDaddy's NS with the two Cloudflare NS above. Save.
 4. Propagation: usually <1h (up to 48h). Cloudflare auto-flips the zone `pending → active`.
 
 **Validate (any session):**
+
 ```
 dig +short NS brawlbox.gg                 # expect shaz/yichun.ns.cloudflare.com
 CF=$(grep -E '^CLOUDFLARE_API_TOKEN=' .env | cut -d= -f2-)
@@ -90,35 +116,97 @@ curl -s "https://api.cloudflare.com/client/v4/zones?name=brawlbox.gg" \
 ```
 
 **DNS records (after active):**
+
 - `brawlbox.gg` + `www` → created automatically when the Cloudflare Pages custom domain is attached (§3).
 - `api.brawlbox.gg` → CNAME to the API Gateway custom-domain target (set up with §4; needs an ACM cert — regional cert in us-west-2 for a regional API Gateway custom domain).
 
 ## 7. Credentials inventory
 
-| Secret | Today | Target |
-|---|---|---|
-| `OPENAI_API_KEY` | `.env` (gitignored), browser via Vite `envPrefix` (dev-only) | AWS Secrets Manager `brawlbox/openai` |
-| `FAL_API_Key` | `.env` (note odd casing) | Secrets Manager `brawlbox/fal` |
-| `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID` | `.env` | CI secret / local only |
-| AWS | `~/.aws` profile `tintin-prod` | CI via OIDC role (GitHub → AWS) |
-| Google / Facebook OAuth | not yet created | Cognito IdP config + Secrets Manager |
+| Secret                                           | Today                                                        | Target                                |
+| ------------------------------------------------ | ------------------------------------------------------------ | ------------------------------------- |
+| `OPENAI_API_KEY`                                 | `.env` (gitignored), browser via Vite `envPrefix` (dev-only) | AWS Secrets Manager `brawlbox/openai` |
+| `FAL_API_Key`                                    | `.env` (note odd casing)                                     | Secrets Manager `brawlbox/fal`        |
+| `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID` | `.env`                                                       | CI secret / local only                |
+| AWS                                              | `~/.aws` profile `tintin-prod`                               | CI via OIDC role (GitHub → AWS)       |
+| Google / Facebook OAuth                          | not yet created                                              | Cognito IdP config + Secrets Manager  |
 
 `.env` is gitignored and must never be committed. Long-term, only the frontend's `VITE_API_BASE_URL` is public.
 
-## 8. Next-session task list (priority order)
+## 8. CI/CD & IaC (GitHub Actions + Terraform)
+
+**Auth to AWS uses GitHub OIDC — no long-lived AWS keys in GitHub.** `brawlbox-infra` provisions an IAM OIDC provider for `token.actions.githubusercontent.com` and per-repo roles scoped by `sub` (repo + branch). Workflows assume the role via `aws-actions/configure-aws-credentials` with `role-to-assume`.
+
+**Terraform remote state (one-time bootstrap).** Chicken-and-egg: the state backend can't be in the state it stores. Bootstrap once with local state (or a tiny `bootstrap/` config):
+
+```
+# in brawlbox-infra, region us-west-2, profile tintin-prod
+aws s3api create-bucket --bucket brawlbox-tfstate-180970910446 \
+  --region us-west-2 --create-bucket-configuration LocationConstraint=us-west-2 --profile tintin-prod
+aws s3api put-bucket-versioning --bucket brawlbox-tfstate-180970910446 \
+  --versioning-configuration Status=Enabled --profile tintin-prod
+aws dynamodb create-table --table-name brawlbox-tflock \
+  --attribute-definitions AttributeName=LockID,AttributeType=S \
+  --key-schema AttributeName=LockID,KeyType=HASH --billing-mode PAY_PER_REQUEST \
+  --region us-west-2 --profile tintin-prod
+```
+
+Then `terraform { backend "s3" { bucket=… key="brawlbox/terraform.tfstate" region="us-west-2" dynamodb_table="brawlbox-tflock" } }`.
+
+**`brawlbox-infra` layout** (suggested):
+
+```
+brawlbox-infra/
+  backend.tf              # S3 remote state + lock
+  providers.tf            # aws region us-west-2
+  variables.tf  outputs.tf
+  github_oidc.tf          # OIDC provider + roles for web/api/infra repos
+  modules/
+    cognito/      # user pool, google+facebook IdPs, app client, hosted domain
+    api/          # HTTP API Gateway, JWT authorizer, custom domain api.brawlbox.gg, ACM
+    lambdas/      # functions referencing the artifact in S3 by version
+    data/         # DynamoDB (characters, users), S3 (assets, templates, artifacts)
+    secrets/      # Secrets Manager: openai, fal, google-oauth, facebook-oauth
+  envs/prod/      # composition + tfvars
+```
+
+**Workflows (GitHub Actions), one per repo:**
+
+- **brawlbox-web** — `bun install && bun run typecheck && bun run test && bun run build`, then deploy to Cloudflare Pages. Easiest is Pages' native Git integration (auto-build on push); or `cloudflare/pages-action` using repo secrets `CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID`.
+- **brawlbox-api** — build/test Lambda, zip, `aws s3 cp` the artifact to the artifact bucket with a version key, then trigger infra (`peter-evans/repository-dispatch` → infra `apply`, or bump a `lambda_version` tfvar via PR). Assumes the `brawlbox-api` OIDC role.
+- **brawlbox-infra** — on PR: `terraform fmt -check`, `init`, `validate`, `plan` (comment plan). On `main`: `terraform apply` gated by a protected GitHub Environment (manual approval). Assumes the `brawlbox-infra` OIDC role.
+
+Skeleton (infra apply job):
+
+```yaml
+permissions: { id-token: write, contents: read }
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    environment: prod            # require reviewers
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with: { role-to-assume: ${{ secrets.AWS_INFRA_ROLE_ARN }}, aws-region: us-west-2 }
+      - uses: hashicorp/setup-terraform@v3
+      - run: terraform init && terraform apply -auto-approve
+```
+
+## 9. Next-session task list (priority order)
 
 1. **Finish the GoDaddy NS change** (user) and confirm `brawlbox.gg` is Active in Cloudflare.
-2. **Repo split**: rename `ftg` → `brawlbox-web`; rebrand strings; create empty `ada-powerful/brawlbox-api`.
-3. **Cloudflare Pages**: connect `brawlbox-web`, deploy, attach `brawlbox.gg` + `www`. Confirm the live site.
-4. **brawlbox-api scaffold**: CDK app (`cdk bootstrap` first), HTTP API + a health lambda, deploy to us-west-2, custom domain `api.brawlbox.gg` (ACM cert + Cloudflare CNAME).
-5. **Secrets proxy**: move OpenAI + fal keys to Secrets Manager; implement `/generate/character` + `/generate/sprites`; point the frontend `ai/` clients at the API (keep BYOK behind a flag).
-6. **Cognito auth**: user pool + Google + Facebook IdPs (create the OAuth apps), JWT authorizer on the API, login UI in the frontend.
-7. **Storage/sharing**: DynamoDB `characters` + S3 atlases; `/characters` CRUD; migrate creator persistence from IndexedDB → API (IndexedDB becomes an offline cache).
-8. **Resume M2.2**: template manifest + sheet slicing + reference upload/gen + App rewire (now calling the fal proxy). See `PHASE_2_PLAN.md` / project memory.
+2. **Repos**: rename `ftg` → `brawlbox-web`; rebrand strings; create empty `ada-powerful/brawlbox-api` and `ada-powerful/brawlbox-infra`.
+3. **Cloudflare Pages**: connect `brawlbox-web`, deploy, attach `brawlbox.gg` + `www`. Confirm the live site. Add the web CI/CD workflow (§8).
+4. **Terraform bootstrap**: in `brawlbox-infra`, create the state bucket + lock table (§8), then the OIDC provider + per-repo deploy roles. Wire the infra `plan`/`apply` workflow.
+5. **brawlbox-api + infra scaffold**: HTTP API + health lambda (artifact → S3 → Terraform), custom domain `api.brawlbox.gg` (ACM regional cert + Cloudflare CNAME). Add the api build/artifact workflow.
+6. **Secrets proxy**: Secrets Manager (openai, fal); implement `/generate/character` + `/generate/sprites`; point the frontend `ai/` clients at the API (keep BYOK behind a flag).
+7. **Cognito auth**: user pool + Google + Facebook IdPs (create the OAuth apps per §5), JWT authorizer on the API, login UI in the frontend.
+8. **Storage/sharing**: DynamoDB `characters` + S3 atlases; `/characters` CRUD; migrate creator persistence from IndexedDB → API (IndexedDB becomes an offline cache).
+9. **Resume M2.2**: template manifest + sheet slicing + reference upload/gen + App rewire (now calling the fal proxy). See `PHASE_2_PLAN.md` / project memory.
 
-## 9. Open decisions / notes
+## 10. Open decisions / notes
 
-- IaC tool: **CDK (TS)** recommended; confirm vs Terraform before scaffolding.
+- **IaC tool: Terraform** (decided), all in `brawlbox-infra`. Remote state in S3 + DynamoDB lock.
+- Lambda deploy handoff: api repo uploads a versioned artifact to S3; infra references it. Decide trigger mechanism (repository_dispatch vs tfvar bump) when wiring §8.
 - Shared `Character` schema: copy first, package later if it drifts.
 - Cloudflare ↔ API Gateway: decide proxied (orange) vs DNS-only (grey) for `api.` — start DNS-only to avoid double-proxy/cert friction.
 - Region pinned **us-west-2** for all BrawlBox resources despite `tintin-prod`'s ap-northeast-1 default.
