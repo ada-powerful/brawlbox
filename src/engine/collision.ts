@@ -36,10 +36,7 @@ export function overlap(a: BoxRect, b: BoxRect): boolean {
   return a.minX < b.maxX && a.maxX > b.minX && a.minY < b.maxY && a.maxY > b.minY;
 }
 
-export function detectHits(
-  world: World,
-  characters: Record<string, Character>,
-): HitEvent[] {
+export function detectHits(world: World, characters: Record<string, Character>): HitEvent[] {
   const events: HitEvent[] = [];
   for (let i = 0; i < world.players.length; i++) {
     const attacker = world.players[i];
@@ -80,10 +77,7 @@ export function detectHits(
   return events;
 }
 
-export function applyPushCollision(
-  world: World,
-  characters: Record<string, Character>,
-): void {
+export function applyPushCollision(world: World, characters: Record<string, Character>): void {
   for (let i = 0; i < world.players.length; i++) {
     for (let j = i + 1; j < world.players.length; j++) {
       const a = world.players[i];
@@ -95,11 +89,7 @@ export function applyPushCollision(
   }
 }
 
-function pushPair(
-  a: Player,
-  b: Player,
-  characters: Record<string, Character>,
-): void {
+function pushPair(a: Player, b: Player, characters: Record<string, Character>): void {
   const ca = characters[a.characterId];
   const cb = characters[b.characterId];
   if (!ca || !cb) return;

@@ -9,7 +9,13 @@ import {
   extractJson,
   formatParseError,
 } from './prompt.ts';
-import type { ChatMessage, ChatProvider, GenerateOptions, GenerateResult, GenSpec } from './types.ts';
+import type {
+  ChatMessage,
+  ChatProvider,
+  GenerateOptions,
+  GenerateResult,
+  GenSpec,
+} from './types.ts';
 
 /**
  * Generate a valid Character from a text spec.

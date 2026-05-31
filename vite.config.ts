@@ -1,12 +1,19 @@
-import { defineConfig } from 'vitest/config';
+import { fileURLToPath, URL } from 'node:url';
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+import tailwindcss from '@tailwindcss/vite';
 
+// App build/dev config. Test config lives in vitest.config.ts to avoid the
+// vite-version type clash between the plugins (vite 6) and vitest's bundled vite.
 export default defineConfig({
+  plugins: [react(), tailwindcss()],
+  resolve: {
+    alias: {
+      '@': fileURLToPath(new URL('./src', import.meta.url)),
+    },
+  },
   build: {
     target: 'es2022',
     sourcemap: true,
-  },
-  test: {
-    environment: 'node',
-    include: ['test/**/*.test.ts'],
   },
 });

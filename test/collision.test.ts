@@ -1,10 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import {
-  applyPushCollision,
-  detectHits,
-  overlap,
-  translateBox,
-} from '../src/engine/collision.ts';
+import { applyPushCollision, detectHits, overlap, translateBox } from '../src/engine/collision.ts';
 import { parseCharacter } from '../src/engine/schema.ts';
 import { createWorld, STAGE_LEFT_X, STAGE_RIGHT_X } from '../src/engine/world.ts';
 import baseChar from '../characters/base/character.json' with { type: 'json' };
@@ -14,19 +9,13 @@ const characters = { base: parseCharacter(baseChar) };
 describe('overlap (AABB)', () => {
   test('boxes overlapping', () => {
     expect(
-      overlap(
-        { minX: 0, maxX: 10, minY: 0, maxY: 10 },
-        { minX: 5, maxX: 15, minY: 5, maxY: 15 },
-      ),
+      overlap({ minX: 0, maxX: 10, minY: 0, maxY: 10 }, { minX: 5, maxX: 15, minY: 5, maxY: 15 }),
     ).toBe(true);
   });
 
   test('boxes touching edges (strict, not overlapping)', () => {
     expect(
-      overlap(
-        { minX: 0, maxX: 10, minY: 0, maxY: 10 },
-        { minX: 10, maxX: 20, minY: 0, maxY: 10 },
-      ),
+      overlap({ minX: 0, maxX: 10, minY: 0, maxY: 10 }, { minX: 10, maxX: 20, minY: 0, maxY: 10 }),
     ).toBe(false);
   });
 

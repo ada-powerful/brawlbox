@@ -38,43 +38,32 @@ function ctx(overrides: Partial<TriggerCtx> = {}): TriggerCtx {
 describe('evalTrigger', () => {
   describe('comparison ops', () => {
     test('eq numbers', () => {
-      expect(
-        evalTrigger({ op: 'eq', left: { ref: 'pos.y' }, right: { const: 0 } }, ctx()),
-      ).toBe(true);
+      expect(evalTrigger({ op: 'eq', left: { ref: 'pos.y' }, right: { const: 0 } }, ctx())).toBe(
+        true,
+      );
     });
     test('ne numbers', () => {
-      expect(
-        evalTrigger({ op: 'ne', left: { ref: 'pos.y' }, right: { const: 5 } }, ctx()),
-      ).toBe(true);
+      expect(evalTrigger({ op: 'ne', left: { ref: 'pos.y' }, right: { const: 5 } }, ctx())).toBe(
+        true,
+      );
     });
     test('lt / le / gt / ge', () => {
       const c = ctx();
       c.player.pos.y = 5;
-      expect(
-        evalTrigger({ op: 'lt', left: { ref: 'pos.y' }, right: { const: 10 } }, c),
-      ).toBe(true);
-      expect(
-        evalTrigger({ op: 'le', left: { ref: 'pos.y' }, right: { const: 5 } }, c),
-      ).toBe(true);
-      expect(
-        evalTrigger({ op: 'gt', left: { ref: 'pos.y' }, right: { const: 0 } }, c),
-      ).toBe(true);
-      expect(
-        evalTrigger({ op: 'ge', left: { ref: 'pos.y' }, right: { const: 5 } }, c),
-      ).toBe(true);
+      expect(evalTrigger({ op: 'lt', left: { ref: 'pos.y' }, right: { const: 10 } }, c)).toBe(true);
+      expect(evalTrigger({ op: 'le', left: { ref: 'pos.y' }, right: { const: 5 } }, c)).toBe(true);
+      expect(evalTrigger({ op: 'gt', left: { ref: 'pos.y' }, right: { const: 0 } }, c)).toBe(true);
+      expect(evalTrigger({ op: 'ge', left: { ref: 'pos.y' }, right: { const: 5 } }, c)).toBe(true);
     });
     test('eq strings (stateNo)', () => {
       expect(
-        evalTrigger(
-          { op: 'eq', left: { ref: 'stateNo' }, right: { const: 'stand' } },
-          ctx(),
-        ),
+        evalTrigger({ op: 'eq', left: { ref: 'stateNo' }, right: { const: 'stand' } }, ctx()),
       ).toBe(true);
     });
     test('mixed-type compare returns false (no coercion)', () => {
-      expect(
-        evalTrigger({ op: 'eq', left: { ref: 'stateNo' }, right: { const: 0 } }, ctx()),
-      ).toBe(false);
+      expect(evalTrigger({ op: 'eq', left: { ref: 'stateNo' }, right: { const: 0 } }, ctx())).toBe(
+        false,
+      );
     });
   });
 
@@ -128,31 +117,25 @@ describe('evalTrigger', () => {
     test('time reads stateTime', () => {
       const c = ctx();
       c.player.stateTime = 7;
-      expect(
-        evalTrigger({ op: 'eq', left: { ref: 'time' }, right: { const: 7 } }, c),
-      ).toBe(true);
+      expect(evalTrigger({ op: 'eq', left: { ref: 'time' }, right: { const: 7 } }, c)).toBe(true);
     });
     test('vel.x and vel.y', () => {
       const c = ctx();
       c.player.vel.x = -3;
       c.player.vel.y = 9;
-      expect(
-        evalTrigger({ op: 'lt', left: { ref: 'vel.x' }, right: { const: 0 } }, c),
-      ).toBe(true);
-      expect(
-        evalTrigger({ op: 'gt', left: { ref: 'vel.y' }, right: { const: 5 } }, c),
-      ).toBe(true);
+      expect(evalTrigger({ op: 'lt', left: { ref: 'vel.x' }, right: { const: 0 } }, c)).toBe(true);
+      expect(evalTrigger({ op: 'gt', left: { ref: 'vel.y' }, right: { const: 5 } }, c)).toBe(true);
     });
     test('animTime and animElem read from player', () => {
       const c = ctx();
       c.player.animTime = 4;
       c.player.animFrame = 2;
-      expect(
-        evalTrigger({ op: 'eq', left: { ref: 'animTime' }, right: { const: 4 } }, c),
-      ).toBe(true);
-      expect(
-        evalTrigger({ op: 'eq', left: { ref: 'animElem' }, right: { const: 2 } }, c),
-      ).toBe(true);
+      expect(evalTrigger({ op: 'eq', left: { ref: 'animTime' }, right: { const: 4 } }, c)).toBe(
+        true,
+      );
+      expect(evalTrigger({ op: 'eq', left: { ref: 'animElem' }, right: { const: 2 } }, c)).toBe(
+        true,
+      );
     });
   });
 
@@ -201,12 +184,7 @@ describe('evalTrigger', () => {
         commands: [{ name: 'fireball', motion: 'D, DF, F, x', bufferTicks: 15 }],
       });
       const c = ctx({ character });
-      c.player.inputBuffer = [
-        Btn.Down,
-        Btn.Down | Btn.Right,
-        Btn.Right,
-        Btn.Right | Btn.X,
-      ];
+      c.player.inputBuffer = [Btn.Down, Btn.Down | Btn.Right, Btn.Right, Btn.Right | Btn.X];
       expect(evalTrigger({ op: 'command', name: 'fireball' }, c)).toBe(true);
     });
 
@@ -215,13 +193,7 @@ describe('evalTrigger', () => {
         commands: [{ name: 'fireball', motion: 'D, DF, F, x', bufferTicks: 15 }],
       });
       const c = ctx({ character });
-      c.player.inputBuffer = [
-        Btn.Down,
-        Btn.Down | Btn.Right,
-        Btn.Right,
-        Btn.Right | Btn.X,
-        0,
-      ];
+      c.player.inputBuffer = [Btn.Down, Btn.Down | Btn.Right, Btn.Right, Btn.Right | Btn.X, 0];
       expect(evalTrigger({ op: 'command', name: 'fireball' }, c)).toBe(false);
     });
   });

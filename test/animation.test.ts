@@ -65,9 +65,7 @@ describe('advanceAnimation', () => {
     const c = makeCharacter({
       test: {
         loop: true,
-        frames: [
-          { sprite: 's', duration: 8, offset: { x: 0, y: 0 }, hitboxes: [], hurtboxes: [] },
-        ],
+        frames: [{ sprite: 's', duration: 8, offset: { x: 0, y: 0 }, hitboxes: [], hurtboxes: [] }],
       },
     });
     const p = makePlayer('test');
@@ -157,9 +155,7 @@ describe('advanceAnimation', () => {
     const c = makeCharacter({
       test: {
         loop: true,
-        frames: [
-          { sprite: 'a', duration: 2, offset: { x: 0, y: 0 }, hitboxes: [], hurtboxes: [] },
-        ],
+        frames: [{ sprite: 'a', duration: 2, offset: { x: 0, y: 0 }, hitboxes: [], hurtboxes: [] }],
       },
     });
     const p = makePlayer('test', 99, 0);

@@ -31,7 +31,7 @@ The four phase-1 commitments are unchanged and **must not regress** — they are
 3. Stable iteration via `Player[]` indices; no `Map`/`Set` in serialized state.
 4. Fixed 60Hz sim, decoupled render via accumulator + interpolation alpha.
 
-**The M8 determinism test must stay green through all of phase 2.** Any creator/editor/AI code lives *outside* `engine/` and never reaches into `tick`.
+**The M8 determinism test must stay green through all of phase 2.** Any creator/editor/AI code lives _outside_ `engine/` and never reaches into `tick`.
 
 ### 3b. New for the creator (Phase 2 specific)
 
@@ -42,16 +42,16 @@ The four phase-1 commitments are unchanged and **must not regress** — they are
 
 ## 4. Tech stack (Phase 2 additions)
 
-| Concern | Choice | Why |
-|---|---|---|
-| Creator UI | **React + Vite** | Editor surface (frame grid, hitbox drag, JSON view) justifies a framework. Same Vite build as engine. |
-| Styling | **Tailwind + shadcn/ui** | Fast, consistent component layer; ~80KB accepted. |
-| LLM config gen | **BYOK: OpenAI or Anthropic**, browser-direct | No server. User pastes key. |
-| Image gen | **gpt-image-2 zero-shot** + reference image | User-confirmed cross-frame consistency without rigs. |
-| Atlas packing | **In-browser canvas packer** → single PNG + JSON-array (Aseprite-shaped) | Matches phase-1 `spriteAtlas` schema; no native tooling. |
-| Local persistence | **IndexedDB** (via `idb`) | Blobs (PNG) + JSON, content-addressed by character id. |
-| Bundle format | **`.ftg` = zip** (`fflate`) | `character.json` + `atlas.png` + `atlas.json` + `manifest.json` (+ sounds later). |
-| Sprite background removal | **Alpha threshold on canvas** | Auto-derive body hurtbox = bounding box of non-transparent pixels. |
+| Concern                   | Choice                                                                   | Why                                                                                                   |
+| ------------------------- | ------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------- |
+| Creator UI                | **React + Vite**                                                         | Editor surface (frame grid, hitbox drag, JSON view) justifies a framework. Same Vite build as engine. |
+| Styling                   | **Tailwind + shadcn/ui**                                                 | Fast, consistent component layer; ~80KB accepted.                                                     |
+| LLM config gen            | **BYOK: OpenAI or Anthropic**, browser-direct                            | No server. User pastes key.                                                                           |
+| Image gen                 | **gpt-image-2 zero-shot** + reference image                              | User-confirmed cross-frame consistency without rigs.                                                  |
+| Atlas packing             | **In-browser canvas packer** → single PNG + JSON-array (Aseprite-shaped) | Matches phase-1 `spriteAtlas` schema; no native tooling.                                              |
+| Local persistence         | **IndexedDB** (via `idb`)                                                | Blobs (PNG) + JSON, content-addressed by character id.                                                |
+| Bundle format             | **`.ftg` = zip** (`fflate`)                                              | `character.json` + `atlas.png` + `atlas.json` + `manifest.json` (+ sounds later).                     |
+| Sprite background removal | **Alpha threshold on canvas**                                            | Auto-derive body hurtbox = bounding box of non-transparent pixels.                                    |
 
 Carried from phase 1, unchanged: TypeScript strict, PixiJS `~8.6.0`, Zod, Vitest, bun.
 
@@ -64,8 +64,8 @@ New non-engine schemas (live in `src/creator/` or `src/ai/`, NOT `engine/schema.
 ```ts
 // AI generation request the LLM fills out — a thin spec over the Character schema.
 type GenSpec = {
-  prompt: string;                 // user's free text
-  style?: string;                 // 'pixel' | 'inked' | 'painted' ...
+  prompt: string; // user's free text
+  style?: string; // 'pixel' | 'inked' | 'painted' ...
   referenceImageDataUrl?: string; // optional anchor for consistency
 };
 
@@ -74,7 +74,7 @@ type FtgManifest = {
   formatVersion: 1;
   characterId: string;
   name: string;
-  createdAt: string;              // ISO; stamped OUTSIDE the engine (no Date.now in tick)
+  createdAt: string; // ISO; stamped OUTSIDE the engine (no Date.now in tick)
   engineVersion: string;
   files: { character: string; atlas: string; atlasMeta: string; sounds?: string[] };
 };
@@ -133,16 +133,16 @@ Total: ~16 working days, ~3 weeks calendar.
 
 ## 8. Risks and mitigations
 
-| Risk | Mitigation |
-|---|---|
+| Risk                                                                                          | Mitigation                                                                                                                                                         |
+| --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | LLM emits structurally-valid but unplayable characters (broken state graph, no win condition) | `parseCharacter` already checks `ChangeState`/`ChangeAnim`/command refs resolve. Add a smoke-sim: run N ticks of scripted input, assert no throw + reachable `ko`. |
-| Cross-frame sprite drift despite reference image | User pre-confirmed zero-shot works; M2.3 per-frame regenerate is the escape hatch. Pin model + seed where the API allows. |
-| BYOK key leakage | Commitment 7: memory-only by default, explicit opt-in for `localStorage`, calls only to provider origin. No third-party scripts on the editor page. |
-| Auto-derived hurtboxes wrong on transparent-heavy frames | Alpha-threshold bounding box + M2.4 manual fix editor. Log frames where the box is suspiciously small/large. |
-| React/editor code creeping into `engine/` and breaking determinism | Commitment 5 + lint rule: `engine/` may not import from `creator/`, `ai/`, `react`, or `pixi`. M8 test is the backstop. |
-| Image-gen cost/latency surprises the user | Show a per-frame cost/credit estimate before generating; generate lazily per animation, not all upfront. |
-| `.ftg` format churn | `formatVersion` in the manifest from day one; importer rejects unknown major versions with a clear message. |
-| IndexedDB blob size / quota | Store atlas as compressed PNG; surface quota errors; export-to-disk is the durable backup. |
+| Cross-frame sprite drift despite reference image                                              | User pre-confirmed zero-shot works; M2.3 per-frame regenerate is the escape hatch. Pin model + seed where the API allows.                                          |
+| BYOK key leakage                                                                              | Commitment 7: memory-only by default, explicit opt-in for `localStorage`, calls only to provider origin. No third-party scripts on the editor page.                |
+| Auto-derived hurtboxes wrong on transparent-heavy frames                                      | Alpha-threshold bounding box + M2.4 manual fix editor. Log frames where the box is suspiciously small/large.                                                       |
+| React/editor code creeping into `engine/` and breaking determinism                            | Commitment 5 + lint rule: `engine/` may not import from `creator/`, `ai/`, `react`, or `pixi`. M8 test is the backstop.                                            |
+| Image-gen cost/latency surprises the user                                                     | Show a per-frame cost/credit estimate before generating; generate lazily per animation, not all upfront.                                                           |
+| `.ftg` format churn                                                                           | `formatVersion` in the manifest from day one; importer rejects unknown major versions with a clear message.                                                        |
+| IndexedDB blob size / quota                                                                   | Store atlas as compressed PNG; surface quota errors; export-to-disk is the durable backup.                                                                         |
 
 ## 9. What this unlocks for Phase 3
 
@@ -153,13 +153,13 @@ Total: ~16 working days, ~3 weeks calendar.
 
 ## 10. Decisions log
 
-| # | Decision | Choice | Rationale |
-|---|---|---|---|
-| B1 | Backend posture | **BYOK, browser-direct** | No server for MVP; revisit proxy in phase 3 for sharing |
-| B2 | Creator UI framework | **React + Tailwind + shadcn** | Editor surface justifies framework; ~80KB accepted |
-| B3 | Hitbox authoring | **Auto-derive (alpha bbox) + minimal manual editor** | Body hurtbox from sprite alpha; attack boxes from LLM per-frame; user fixes outliers |
-| B4 | Sprite generation | **gpt-image-2 zero-shot + reference image** | User-confirmed consistency without LoRA/ControlNet |
-| B5 | Validation strategy | **`parseCharacter` Zod-retry loop** | Zod errors are good prompt feedback; no un-parsed JSON enters engine |
-| B6 | Persistence | **IndexedDB, content-addressed** | Offline reload; export is durable backup |
-| B7 | Bundle format | **`.ftg` zip + `formatVersion`** | Portable, versioned, re-validated on import |
-| B8 | Engine isolation | **No AI imports in `engine/`; lint-enforced** | Protects the 4 phase-1 commitments / rollback readiness |
+| #   | Decision             | Choice                                               | Rationale                                                                            |
+| --- | -------------------- | ---------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| B1  | Backend posture      | **BYOK, browser-direct**                             | No server for MVP; revisit proxy in phase 3 for sharing                              |
+| B2  | Creator UI framework | **React + Tailwind + shadcn**                        | Editor surface justifies framework; ~80KB accepted                                   |
+| B3  | Hitbox authoring     | **Auto-derive (alpha bbox) + minimal manual editor** | Body hurtbox from sprite alpha; attack boxes from LLM per-frame; user fixes outliers |
+| B4  | Sprite generation    | **gpt-image-2 zero-shot + reference image**          | User-confirmed consistency without LoRA/ControlNet                                   |
+| B5  | Validation strategy  | **`parseCharacter` Zod-retry loop**                  | Zod errors are good prompt feedback; no un-parsed JSON enters engine                 |
+| B6  | Persistence          | **IndexedDB, content-addressed**                     | Offline reload; export is durable backup                                             |
+| B7  | Bundle format        | **`.ftg` zip + `formatVersion`**                     | Portable, versioned, re-validated on import                                          |
+| B8  | Engine isolation     | **No AI imports in `engine/`; lint-enforced**        | Protects the 4 phase-1 commitments / rollback readiness                              |

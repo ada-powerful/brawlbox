@@ -38,6 +38,7 @@ We're not implementing rollback in phase 1, but if any phase-1 code violates the
 ### Hit-pause clock semantics (specified, not asked)
 
 When a HitDef lands, both players enter hit-pause for `pauseTime` ticks. During hit-pause:
+
 - ✅ Input buffers continue accumulating (so a buffered cancel works on unfreeze).
 - ✅ `world.tick` continues incrementing (it's the simulation clock).
 - ❌ Per-player `stateTime` does NOT advance.
@@ -53,17 +54,17 @@ When two players' body boxes overlap and both are grounded: each pushes the othe
 
 ## 4. Tech stack (locked)
 
-| Concern | Choice | Why |
-|---|---|---|
-| Language | TypeScript (strict) | Type-safe state machine, schema validation |
-| Build | Vite | Fast HMR, bun/pnpm-friendly |
-| Renderer | PixiJS pinned to `~8.6.0` | Sprite batching done. Pin exact patch — v8 ParticleContainer API churned during 2024–25 |
-| Schema | Zod, with `z.infer` for types | Single source of truth — never write TS types and Zod schemas separately |
-| Tests | Vitest | Determinism tests, schema fuzz |
-| Math | `number` (float64), wrapped in `Vec2` helpers | Local-only rollback OK with floats. Wrapping leaves room to swap to fixed-point later |
-| Asset pipeline | Aseprite → JSON-array export | Standard format, free tooling, atlas+frame metadata in one file |
-| Package mgr / runtime | bun | Already on machine; faster install + native test runner |
-| Hosting | Any static host (Vercel / Cloudflare Pages / Netlify) | Build emits `dist/`; platform-neutral. Pick one at deploy time |
+| Concern               | Choice                                                | Why                                                                                     |
+| --------------------- | ----------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| Language              | TypeScript (strict)                                   | Type-safe state machine, schema validation                                              |
+| Build                 | Vite                                                  | Fast HMR, bun/pnpm-friendly                                                             |
+| Renderer              | PixiJS pinned to `~8.6.0`                             | Sprite batching done. Pin exact patch — v8 ParticleContainer API churned during 2024–25 |
+| Schema                | Zod, with `z.infer` for types                         | Single source of truth — never write TS types and Zod schemas separately                |
+| Tests                 | Vitest                                                | Determinism tests, schema fuzz                                                          |
+| Math                  | `number` (float64), wrapped in `Vec2` helpers         | Local-only rollback OK with floats. Wrapping leaves room to swap to fixed-point later   |
+| Asset pipeline        | Aseprite → JSON-array export                          | Standard format, free tooling, atlas+frame metadata in one file                         |
+| Package mgr / runtime | bun                                                   | Already on machine; faster install + native test runner                                 |
+| Hosting               | Any static host (Vercel / Cloudflare Pages / Netlify) | Build emits `dist/`; platform-neutral. Pick one at deploy time                          |
 
 Open for phase 2 (don't decide now): creator-UI framework, backend/proxy posture, online-play library (likely [`@tboyt/telegraph`](https://www.npmjs.com/package/@tboyt/telegraph)).
 
@@ -77,21 +78,24 @@ Designed to be (a) the LLM target in phase 2, (b) hand-writable in phase 1, (c) 
 type Character = {
   meta: { id: string; name: string; author: string; version: string };
   data: {
-    life: number; attack: number; defence: number;
-    walkFwd: number; walkBack: number;
+    life: number;
+    attack: number;
+    defence: number;
+    walkFwd: number;
+    walkBack: number;
     jumpVel: { x: number; y: number };
     gravity: number;
     groundFriction: number;
   };
   size: { width: number; height: number; headY: number };
   spriteAtlas: { url: string; frames: Record<string, FrameRect> };
-  animations: Record<AnimId, Animation>;   // keyed by string id
-  states: Record<StateId, State>;          // keyed by string id, NOT array
-  commands: Command[];                     // ordered: textual order = priority
-  sounds: Record<string, string>;          // id -> .ogg url
+  animations: Record<AnimId, Animation>; // keyed by string id
+  states: Record<StateId, State>; // keyed by string id, NOT array
+  commands: Command[]; // ordered: textual order = priority
+  sounds: Record<string, string>; // id -> .ogg url
 };
 
-type StateId = string;  // 'stand' | 'walk' | 'jump.start' | 'hit.stand' | 'ko' | 'punch.light' | ...
+type StateId = string; // 'stand' | 'walk' | 'jump.start' | 'hit.stand' | 'ko' | 'punch.light' | ...
 type AnimId = string;
 
 type Animation = {
@@ -99,19 +103,19 @@ type Animation = {
   frames: AnimFrame[];
 };
 type AnimFrame = {
-  sprite: string;            // key into spriteAtlas.frames
-  duration: number;          // ticks; -1 = hold last (state-change is the only exit)
+  sprite: string; // key into spriteAtlas.frames
+  duration: number; // ticks; -1 = hold last (state-change is the only exit)
   offset: { x: number; y: number };
-  hurtboxes: AABB[];         // Clsn2
-  hitboxes: AABB[];          // Clsn1
+  hurtboxes: AABB[]; // Clsn2
+  hitboxes: AABB[]; // Clsn1
 };
 type AABB = { x: number; y: number; w: number; h: number };
 
 type State = {
   id: StateId;
-  type: 'S' | 'C' | 'A' | 'L';      // stand | crouch | air | lie
-  moveType: 'A' | 'I' | 'H';        // attack | idle | hit
-  physics: 'S' | 'C' | 'A' | 'N';   // stand-friction | crouch-friction | gravity | none
+  type: 'S' | 'C' | 'A' | 'L'; // stand | crouch | air | lie
+  moveType: 'A' | 'I' | 'H'; // attack | idle | hit
+  physics: 'S' | 'C' | 'A' | 'N'; // stand-friction | crouch-friction | gravity | none
   anim?: AnimId;
   velSet?: { x?: number; y?: number };
   ctrl?: 0 | 1;
@@ -119,14 +123,14 @@ type State = {
 };
 
 type Controller =
-  | { type: 'ChangeState'; value: StateId; ctrl?: 0|1; trigger: Trigger }
-  | { type: 'ChangeAnim';  value: AnimId;  trigger: Trigger }
-  | { type: 'VelSet';      x?: number; y?: number; trigger: Trigger }
-  | { type: 'VelAdd';      x?: number; y?: number; trigger: Trigger }
-  | { type: 'CtrlSet';     value: 0|1; trigger: Trigger }
-  | { type: 'HitDef';      def: HitDef; trigger: Trigger }
-  | { type: 'PlaySnd';     id: string; trigger: Trigger }
-  | { type: 'LifeAdd';     value: number; trigger: Trigger };
+  | { type: 'ChangeState'; value: StateId; ctrl?: 0 | 1; trigger: Trigger }
+  | { type: 'ChangeAnim'; value: AnimId; trigger: Trigger }
+  | { type: 'VelSet'; x?: number; y?: number; trigger: Trigger }
+  | { type: 'VelAdd'; x?: number; y?: number; trigger: Trigger }
+  | { type: 'CtrlSet'; value: 0 | 1; trigger: Trigger }
+  | { type: 'HitDef'; def: HitDef; trigger: Trigger }
+  | { type: 'PlaySnd'; id: string; trigger: Trigger }
+  | { type: 'LifeAdd'; value: number; trigger: Trigger };
 
 // Triggers are a JSON AST — LLM-friendly, Zod-validatable, no string parsing.
 type Trigger =
@@ -134,29 +138,29 @@ type Trigger =
   | { op: 'not'; arg: Trigger }
   | { op: 'eq' | 'ne' | 'lt' | 'le' | 'gt' | 'ge'; left: Value; right: Value }
   | { op: 'flag'; name: 'ctrl' | 'moveContact' | 'moveHit' | 'moveGuarded' }
-  | { op: 'command'; name: string };  // checks named command in input buffer
+  | { op: 'command'; name: string }; // checks named command in input buffer
 
 type Value =
   | { const: number | string | boolean }
   | { ref: 'time' | 'animTime' | 'animElem' | 'stateNo' | 'vel.x' | 'vel.y' | 'pos.y' | 'life' };
 
 type HitDef = {
-  attr: { state: 'S'|'C'|'A'; class: 'NA'|'SA'|'HA'|'NT'|'ST'|'HT' };
+  attr: { state: 'S' | 'C' | 'A'; class: 'NA' | 'SA' | 'HA' | 'NT' | 'ST' | 'HT' };
   damage: { hit: number; guard: number };
-  hitFlag: string;       // 'MAF'
-  guardFlag: string;     // 'MA'
+  hitFlag: string; // 'MAF'
+  guardFlag: string; // 'MA'
   pauseTime: { p1: number; p2: number };
   groundHitTime: number;
   groundVelocity: { x: number; y: number };
   airVelocity: { x: number; y: number };
-  priority: number;      // phase-1: higher wins, equal trades, no Hit/Miss/Dodge classes
+  priority: number; // phase-1: higher wins, equal trades, no Hit/Miss/Dodge classes
   fall?: boolean;
   sound?: string;
 };
 
 type Command = {
-  name: string;       // 'qcf_x', 'punch'
-  motion: string;     // mini-notation: '~D, DF, F, x' | 'x' | 'F+x'  (motion strings ARE OK; not part of the per-tick eval hot path)
+  name: string; // 'qcf_x', 'punch'
+  motion: string; // mini-notation: '~D, DF, F, x' | 'x' | 'F+x'  (motion strings ARE OK; not part of the per-tick eval hot path)
   bufferTicks: number; // default 15
 };
 ```
@@ -166,10 +170,12 @@ type Command = {
 ### Base character inheritance (specified)
 
 Two characters are authored:
+
 - `base/character.json` — every state every fighter inherits: `'stand'`, `'walk'`, `'crouch'`, `'jump.start'`, `'jump.up'`, `'jump.land'`, `'guard.stand'`, `'guard.crouch'`, `'hit.stand'`, `'hit.crouch'`, `'hit.air'`, `'ko'`. No attacks.
 - `stick/character.json` — declares `extends: 'base'`, adds `'punch.light'` only.
 
 Merge semantics: `mergeCharacter(base, override)` returns a new Character where:
+
 - `meta` is from override.
 - `data`/`size` are deep-merged, override wins on primitives.
 - `animations`, `states`, `sounds` are key-merged: override entry replaces base entry at the same key entirely (no per-field merge inside a state; if you override `'stand'`, you replace the whole state).
@@ -265,21 +271,22 @@ Total: roughly 10 working days for a focused solo dev. Two weeks calendar with n
 
 ## 8. Risks and how we mitigate
 
-| Risk | Mitigation |
-|---|---|
-| Floating-point nondeterminism cross-machine | Phase 1 is local-only. Wrap math in `Vec2`/`Scalar` so we can swap to fixed-point in phase 3 if needed |
-| Trigger AST grows verbose for hand-authoring | Phase-1 character JSON is small (~30KB). If verbosity hurts iteration, add an Aseprite-side authoring helper, not a string parser |
-| State machine semantics drift from MUGEN's | Treat MUGEN as reference, not gospel. Document any deviation in `engine/SEMANTICS.md` as we go |
-| Pixi rendering bottlenecks | Won't happen at phase-1 scale (~50 sprites). Don't pre-optimize |
-| Asset pipeline pain (drawing stick figures) | Aseprite + JSON-array export. 8 frames per animation × 5 animations = entire phase-1 asset budget |
+| Risk                                                                | Mitigation                                                                                                                                                                      |
+| ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Floating-point nondeterminism cross-machine                         | Phase 1 is local-only. Wrap math in `Vec2`/`Scalar` so we can swap to fixed-point in phase 3 if needed                                                                          |
+| Trigger AST grows verbose for hand-authoring                        | Phase-1 character JSON is small (~30KB). If verbosity hurts iteration, add an Aseprite-side authoring helper, not a string parser                                               |
+| State machine semantics drift from MUGEN's                          | Treat MUGEN as reference, not gospel. Document any deviation in `engine/SEMANTICS.md` as we go                                                                                  |
+| Pixi rendering bottlenecks                                          | Won't happen at phase-1 scale (~50 sprites). Don't pre-optimize                                                                                                                 |
+| Asset pipeline pain (drawing stick figures)                         | Aseprite + JSON-array export. 8 frames per animation × 5 animations = entire phase-1 asset budget                                                                               |
 | Schema decisions paint us into a corner for phase 2 (LLM authoring) | The format above was designed with that in mind: JSON-native, AST triggers, string IDs, single Zod source. Revisit at phase-2 kickoff but expect minor additions, not redesigns |
-| `structuredClone` perf cliff for rollback | Phase-1 only uses it for the M8 test (1800 clones over 30s test, sub-second). Phase-3 rollback work explicitly includes replacing it with `saveState/loadState` |
-| NaN/Infinity in `vel`/`pos` propagating silently | Dev-build assertion at end of `tick`: every `Player.pos` and `Player.vel` must be finite. Throw with state context |
-| `ChangeState` to a state that doesn't exist after merge | `mergeCharacter` validates: every `ChangeState.value`, `ChangeAnim.value`, every `state.anim` ref must resolve in the merged Character. Throw at load, never at `tick` |
+| `structuredClone` perf cliff for rollback                           | Phase-1 only uses it for the M8 test (1800 clones over 30s test, sub-second). Phase-3 rollback work explicitly includes replacing it with `saveState/loadState`                 |
+| NaN/Infinity in `vel`/`pos` propagating silently                    | Dev-build assertion at end of `tick`: every `Player.pos` and `Player.vel` must be finite. Throw with state context                                                              |
+| `ChangeState` to a state that doesn't exist after merge             | `mergeCharacter` validates: every `ChangeState.value`, `ChangeAnim.value`, every `state.anim` ref must resolve in the merged Character. Throw at load, never at `tick`          |
 
 ## 9. What this unlocks for phase 2
 
 When the engine works, the AI-creator pipeline becomes well-scoped:
+
 - LLM emits a `Character` JSON conforming to the Zod schema (validation = free correctness gate).
 - gpt-image-2 generates frames per animation, packed into an Aseprite-format atlas.
 - The same engine that runs hand-authored characters runs AI-generated ones — no special path.
@@ -289,16 +296,16 @@ Phase 1 buys us a known-good substrate. Phase 2 builds the creator on top of it.
 
 ## 10. Decisions log (from `/plan-eng-review`)
 
-| # | Decision | Choice | Rationale |
-|---|---|---|---|
-| A1 | Trigger DSL: string vs JSON AST | **JSON AST** | LLM-friendly; Zod-validatable; no custom parser surface |
-| A2 | State IDs: numeric vs string | **String** | LLM-friendly; readable in code, debug, errors |
-| A3 | Hit-pause clock semantics | Specified in §3 | stateTime/animTime/physics/triggers freeze; input buffer + world.tick continue |
-| A4 | `structuredClone` perf | Phase-1 OK; flagged for phase-3 replacement | Sub-second on M8 test; rollback needs typed save/load |
-| A5 | `players: Player[]` not p1/p2 | **Array** | Future tag/4-player without rewrite |
-| C1 | TS types vs Zod schemas | **`z.infer`, single source** | No type/schema drift |
-| C2 | Base/override merge | Key-merge `Record<StateId, State>`, override replaces whole state | Specified in §5 |
-| C3 | Atlas format | **Aseprite JSON-array** | Standard, free tool, atlas+meta in one file |
-| Test | Coverage gaps | Added explicit test files per milestone | See §6 + §7 |
-| Perf | Pixi version | **`~8.6.0` pinned** | v8 ParticleContainer churned in 2024–25 |
-| Scope | Public deploy | Added to M0 | Every milestone playable from a URL |
+| #     | Decision                        | Choice                                                            | Rationale                                                                      |
+| ----- | ------------------------------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| A1    | Trigger DSL: string vs JSON AST | **JSON AST**                                                      | LLM-friendly; Zod-validatable; no custom parser surface                        |
+| A2    | State IDs: numeric vs string    | **String**                                                        | LLM-friendly; readable in code, debug, errors                                  |
+| A3    | Hit-pause clock semantics       | Specified in §3                                                   | stateTime/animTime/physics/triggers freeze; input buffer + world.tick continue |
+| A4    | `structuredClone` perf          | Phase-1 OK; flagged for phase-3 replacement                       | Sub-second on M8 test; rollback needs typed save/load                          |
+| A5    | `players: Player[]` not p1/p2   | **Array**                                                         | Future tag/4-player without rewrite                                            |
+| C1    | TS types vs Zod schemas         | **`z.infer`, single source**                                      | No type/schema drift                                                           |
+| C2    | Base/override merge             | Key-merge `Record<StateId, State>`, override replaces whole state | Specified in §5                                                                |
+| C3    | Atlas format                    | **Aseprite JSON-array**                                           | Standard, free tool, atlas+meta in one file                                    |
+| Test  | Coverage gaps                   | Added explicit test files per milestone                           | See §6 + §7                                                                    |
+| Perf  | Pixi version                    | **`~8.6.0` pinned**                                               | v8 ParticleContainer churned in 2024–25                                        |
+| Scope | Public deploy                   | Added to M0                                                       | Every milestone playable from a URL                                            |
