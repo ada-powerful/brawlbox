@@ -7,11 +7,14 @@ import { Switch } from '@/components/ui/switch.tsx';
 import { Textarea } from '@/components/ui/textarea.tsx';
 import { generateCharacter } from '@/ai/llm.ts';
 import { createOpenAIProvider } from '@/ai/openai.ts';
-import { clearKey, getKey, setKey } from '@/ai/keystore.ts';
+import { clearKey, getEnvKey, getKey, setKey } from '@/ai/keystore.ts';
 import type { Character } from '@/engine/schema.ts';
 import { Playtest } from '@/creator/Playtest.tsx';
 
 const EXAMPLE = 'a stone golem brawler with a slow, heavy uppercut and lots of health';
+
+// A key from .env (if any) takes over — the manual key card is then hidden.
+const ENV_KEY = getEnvKey();
 
 export function App() {
   const [apiKey, setApiKey] = useState('');
@@ -23,8 +26,9 @@ export function App() {
   const [character, setCharacter] = useState<Character | null>(null);
   const [json, setJson] = useState('');
 
-  // Hydrate any persisted key on first load.
+  // Hydrate any persisted key on first load (skipped when .env provides one).
   useEffect(() => {
+    if (ENV_KEY) return;
     const k = getKey();
     if (k) {
       setApiKey(k);
@@ -41,7 +45,8 @@ export function App() {
   const generate = async (): Promise<void> => {
     setError(null);
     setStatus(null);
-    if (!apiKey.trim()) {
+    const key = ENV_KEY ?? apiKey.trim();
+    if (!key) {
       setError('Enter an OpenAI API key first.');
       return;
     }
@@ -51,7 +56,7 @@ export function App() {
     }
     setBusy(true);
     try {
-      const provider = createOpenAIProvider(apiKey.trim());
+      const provider = createOpenAIProvider(key);
       const result = await generateCharacter({ prompt: prompt.trim() }, provider);
       setCharacter(result.character);
       setJson(JSON.stringify(result.character, null, 2));
@@ -79,42 +84,46 @@ export function App() {
         <h1 className="text-xl font-semibold tracking-tight">
           ftg <span className="text-muted-foreground">character creator</span>
         </h1>
-        <span className="text-xs text-muted-foreground">M2.1 — BYOK config generation</span>
+        <span className="text-xs text-muted-foreground">
+          {ENV_KEY ? 'key loaded from .env' : 'M2.1 — BYOK config generation'}
+        </span>
       </header>
 
       <div className="grid flex-1 grid-cols-1 gap-4 lg:grid-cols-[420px_1fr]">
         {/* Controls */}
         <div className="flex flex-col gap-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>OpenAI key</CardTitle>
-            </CardHeader>
-            <CardContent className="flex flex-col gap-3">
-              <Input
-                type="password"
-                placeholder="sk-..."
-                value={apiKey}
-                onChange={(e) => persistKey(e.target.value, remember)}
-                autoComplete="off"
-              />
-              <div className="flex items-center justify-between">
-                <Label htmlFor="remember" className="text-muted-foreground">
-                  Remember on this device
-                </Label>
-                <Switch
-                  id="remember"
-                  checked={remember}
-                  onCheckedChange={(v) => {
-                    setRemember(v);
-                    persistKey(apiKey, v);
-                  }}
+          {!ENV_KEY && (
+            <Card>
+              <CardHeader>
+                <CardTitle>OpenAI key</CardTitle>
+              </CardHeader>
+              <CardContent className="flex flex-col gap-3">
+                <Input
+                  type="password"
+                  placeholder="sk-..."
+                  value={apiKey}
+                  onChange={(e) => persistKey(e.target.value, remember)}
+                  autoComplete="off"
                 />
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Sent only to api.openai.com, never to any ftg server.
-              </p>
-            </CardContent>
-          </Card>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="remember" className="text-muted-foreground">
+                    Remember on this device
+                  </Label>
+                  <Switch
+                    id="remember"
+                    checked={remember}
+                    onCheckedChange={(v) => {
+                      setRemember(v);
+                      persistKey(apiKey, v);
+                    }}
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Sent only to api.openai.com, never to any ftg server.
+                </p>
+              </CardContent>
+            </Card>
+          )}
 
           <Card>
             <CardHeader>

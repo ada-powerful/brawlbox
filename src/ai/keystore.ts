@@ -53,6 +53,25 @@ export function hasKey(): boolean {
   return getKey() !== null;
 }
 
+/**
+ * A key supplied via the environment (.env `OPENAI_API_KEY`, exposed by
+ * vite `envPrefix`). When present the UI skips the key-entry card. Dev-only
+ * convenience — env keys are baked into the bundle, so don't rely on this for
+ * shared deploys.
+ */
+export function getEnvKey(): string | null {
+  try {
+    // Dev-only. In a production build `import.meta.env.DEV` is the literal
+    // `false`, so the key reference below is dead-code-eliminated and never
+    // baked into the shipped bundle.
+    if (!import.meta.env?.DEV) return null;
+    const k = import.meta.env?.OPENAI_API_KEY;
+    return typeof k === 'string' && k.length > 0 ? k : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Wipe the key from memory and localStorage. */
 export function clearKey(): void {
   memKey = null;

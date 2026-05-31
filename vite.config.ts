@@ -7,6 +7,10 @@ import tailwindcss from '@tailwindcss/vite';
 // vite-version type clash between the plugins (vite 6) and vitest's bundled vite.
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  // Expose OPENAI_API_KEY from .env to the client so the key card can be skipped
+  // in local dev. This bakes the key into the dev bundle — fine for a personal
+  // BYOK dev tool, NOT for a shared/public deploy (use the key card there).
+  envPrefix: ['VITE_', 'OPENAI_'],
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
