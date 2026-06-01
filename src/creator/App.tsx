@@ -8,6 +8,7 @@ import { Textarea } from '@/components/ui/textarea.tsx';
 import { generateCharacter } from '@/ai/llm.ts';
 import { createOpenAIProvider } from '@/ai/openai.ts';
 import { generateCharacterViaBackend } from '@/ai/backend.ts';
+import { generateSpritesViaBackend } from '@/ai/spritesBackend.ts';
 import { CHROMA, defaultBackgroundForModel, generateCharacterSprites } from '@/ai/image.ts';
 import { clearKey, getEnvKey, getKey, setKey } from '@/ai/keystore.ts';
 import { applySpritesToCharacter } from '@/creator/image/pack.ts';
@@ -121,22 +122,31 @@ export function App() {
     if (!character) return;
     setError(null);
     setStatus(null);
-    const key = resolveKey();
-    if (!key) return;
+    // BYOK path needs a key; backend path retextures the template server-side.
+    let key: string | null = null;
+    if (!BACKEND_MODE) {
+      key = resolveKey();
+      if (!key) return;
+    }
     setImgBusy(true);
     setImgProgress({ done: 0, total: 0 });
     try {
-      const background = defaultBackgroundForModel(model);
-      const images = await generateCharacterSprites(character, prompt.trim(), key, {
-        model,
-        background,
-        onProgress: (done, total) => setImgProgress({ done, total }),
-      });
-      // gpt-image-2 can't emit transparency — key out the magenta backdrop here.
-      const packed = await packSprites(
-        images,
-        background === 'chroma' ? { chromaKey: CHROMA } : {},
-      );
+      let images: Record<string, Blob>;
+      let packed;
+      if (BACKEND_MODE && API_BASE) {
+        // fal-retextured template sheet, sliced to per-key frames on black bg.
+        images = await generateSpritesViaBackend(API_BASE, prompt.trim(), character);
+        packed = await packSprites(images, { chromaKey: { r: 0, g: 0, b: 0 }, chromaTolerance: 90 });
+      } else {
+        const background = defaultBackgroundForModel(model);
+        images = await generateCharacterSprites(character, prompt.trim(), key!, {
+          model,
+          background,
+          onProgress: (done, total) => setImgProgress({ done, total }),
+        });
+        // gpt-image-2 can't emit transparency — key out the magenta backdrop here.
+        packed = await packSprites(images, background === 'chroma' ? { chromaKey: CHROMA } : {});
+      }
       const sprited = applySpritesToCharacter(
         character,
         `${character.meta.id}/atlas.png`,
@@ -192,7 +202,7 @@ export function App() {
           {ENV_KEY
             ? 'key loaded from .env'
             : BACKEND_MODE
-              ? 'character gen via BrawlBox API'
+              ? 'generation via BrawlBox API'
               : 'M2.2 — AI sprite generation'}
         </span>
       </header>
@@ -200,7 +210,7 @@ export function App() {
       <div className="grid flex-1 grid-cols-1 gap-4 lg:grid-cols-[420px_1fr]">
         {/* Controls */}
         <div className="flex flex-col gap-4">
-          {!ENV_KEY && (
+          {!ENV_KEY && !BACKEND_MODE && (
             <Card>
               <CardHeader>
                 <CardTitle>OpenAI key</CardTitle>
@@ -252,27 +262,32 @@ export function App() {
 
               {character && (
                 <>
-                  <div className="flex items-center gap-2">
-                    <Label htmlFor="model" className="text-muted-foreground whitespace-nowrap">
-                      Image model
-                    </Label>
-                    <Input
-                      id="model"
-                      value={model}
-                      onChange={(e) => setModel(e.target.value)}
-                      className="h-8"
-                    />
-                  </div>
+                  {!BACKEND_MODE && (
+                    <div className="flex items-center gap-2">
+                      <Label htmlFor="model" className="text-muted-foreground whitespace-nowrap">
+                        Image model
+                      </Label>
+                      <Input
+                        id="model"
+                        value={model}
+                        onChange={(e) => setModel(e.target.value)}
+                        className="h-8"
+                      />
+                    </div>
+                  )}
                   <Button variant="secondary" onClick={generateSprites} disabled={busy || imgBusy}>
                     {imgBusy
-                      ? `Generating sprites… ${imgProgress?.done ?? 0}/${imgProgress?.total ?? '?'}`
+                      ? hasSprites || BACKEND_MODE
+                        ? 'Generating sprites…'
+                        : `Generating sprites… ${imgProgress?.done ?? 0}/${imgProgress?.total ?? '?'}`
                       : hasSprites
                         ? '2 · Regenerate sprites'
                         : '2 · Generate sprites'}
                   </Button>
                   <p className="text-xs text-muted-foreground">
-                    Sprite generation makes one image API call per animation frame (billed to your
-                    key). Takes a minute or two.
+                    {BACKEND_MODE
+                      ? 'Sprites are generated on the BrawlBox API (fal retexture). Takes about a minute.'
+                      : 'Sprite generation makes one image API call per animation frame (billed to your key). Takes a minute or two.'}
                   </p>
                 </>
               )}
