@@ -68,7 +68,7 @@ export class FighterRenderer {
       this.textures = opts.textures;
       this.sprite = new Sprite();
       this.sprite.anchor.set(0.5, 1); // feet-center, matches world feet anchor
-      this.sprite.tint = color; // white silhouettes tint to the player's color
+      // AI atlases are full-color art, so render them as-is (no player tint).
       this.view = this.sprite;
     } else {
       this.gfx = new Graphics();
