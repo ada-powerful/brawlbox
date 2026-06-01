@@ -24,6 +24,12 @@ import { applySpritesToCharacter } from '@/creator/image/pack.ts';
 import { packSprites } from '@/creator/image/packAtlas.ts';
 import type { Character } from '@/engine/schema.ts';
 import { Playtest } from '@/creator/Playtest.tsx';
+import {
+  listCloudCharacters,
+  saveCloudCharacter,
+  deleteCloudCharacter,
+  type CloudCharacter,
+} from '@/creator/store/cloud.ts';
 
 const EXAMPLE = 'a stone golem brawler with a slow, heavy uppercut and lots of health';
 
@@ -52,11 +58,32 @@ export function App() {
   const [json, setJson] = useState('');
   const [model, setModel] = useState(IMAGE_MODEL);
   const [user, setUser] = useState<User | null>(null);
+  const [saved, setSaved] = useState<CloudCharacter[]>([]);
+  const [atlasBlob, setAtlasBlob] = useState<Blob | null>(null);
+
+  // Cloud storage is available when signed in to the backend.
+  const canCloud = BACKEND_MODE && AUTH_ENABLED && !!API_BASE;
 
   // Complete any hosted-UI redirect (?code=) and load the current session.
   useEffect(() => {
     if (AUTH_ENABLED) void handleRedirectCallback().then(setUser);
   }, []);
+
+  const refreshSaved = async (): Promise<void> => {
+    if (!canCloud || !user || !API_BASE) return;
+    try {
+      const token = await getAccessToken();
+      if (token) setSaved(await listCloudCharacters(API_BASE, token));
+    } catch {
+      /* non-fatal */
+    }
+  };
+
+  // Reload the user's saved characters whenever the session changes.
+  useEffect(() => {
+    void refreshSaved();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
 
   // Backend generation needs a signed-in user when auth is on. Returns the
   // access token, or triggers login (redirect) and returns undefined to abort.
@@ -129,6 +156,7 @@ export function App() {
           ? await generateCharacterViaBackend(API_BASE, { prompt: prompt.trim() }, token)
           : await generateCharacter({ prompt: prompt.trim() }, createOpenAIProvider(key!));
       swapAtlasUrl(undefined); // new config => drop old sprites
+      setAtlasBlob(null);
       setCharacter(result.character);
       setJson(JSON.stringify(result.character, null, 2));
       setStatus(
@@ -181,14 +209,56 @@ export function App() {
         packed.hurtboxes,
       );
       swapAtlasUrl(URL.createObjectURL(packed.atlasBlob));
+      setAtlasBlob(packed.atlasBlob);
       setCharacter(sprited);
       setJson(JSON.stringify(sprited, null, 2));
-      setStatus('Sprites generated.');
+      setStatus(canCloud ? 'Sprites generated. Save to keep them.' : 'Sprites generated.');
     } catch (e) {
       setError((e as Error).message);
     } finally {
       setImgBusy(false);
       setImgProgress(null);
+    }
+  };
+
+  const saveCurrent = async (): Promise<void> => {
+    if (!character || !canCloud || !API_BASE) return;
+    const token = await getAccessToken();
+    if (!token) {
+      void login();
+      return;
+    }
+    setError(null);
+    try {
+      await saveCloudCharacter(API_BASE, token, {
+        character,
+        name: character.meta.name,
+        atlas: atlasBlob ?? undefined,
+      });
+      setStatus('Saved to your collection.');
+      await refreshSaved();
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+
+  const loadSaved = (c: CloudCharacter): void => {
+    setCharacter(c.character);
+    setJson(JSON.stringify(c.character, null, 2));
+    setAtlasBlob(null);
+    swapAtlasUrl(c.atlasUrl); // presigned URL; loadAtlasTextures fetches it
+    setStatus(`Loaded "${c.name}".`);
+  };
+
+  const removeSaved = async (id: string): Promise<void> => {
+    if (!canCloud || !API_BASE) return;
+    const token = await getAccessToken();
+    if (!token) return;
+    try {
+      await deleteCloudCharacter(API_BASE, token, id);
+      await refreshSaved();
+    } catch (e) {
+      setError((e as Error).message);
     }
   };
 
@@ -316,6 +386,15 @@ export function App() {
                       ? 'Sprites are generated on the BrawlBox API (fal retexture). Takes about a minute.'
                       : 'Sprite generation makes one image API call per animation frame (billed to your key). Takes a minute or two.'}
                   </p>
+                  {canCloud && (
+                    <Button
+                      variant="outline"
+                      onClick={() => void saveCurrent()}
+                      disabled={busy || imgBusy}
+                    >
+                      Save to my collection
+                    </Button>
+                  )}
                 </>
               )}
 
@@ -336,6 +415,33 @@ export function App() {
                 <pre className="max-h-[340px] overflow-auto rounded-md bg-secondary/40 p-3 text-xs leading-relaxed">
                   {json}
                 </pre>
+              </CardContent>
+            </Card>
+          )}
+
+          {canCloud && saved.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle>My characters</CardTitle>
+              </CardHeader>
+              <CardContent className="flex flex-col gap-1">
+                {saved.map((c) => (
+                  <div key={c.characterId} className="flex items-center justify-between gap-2">
+                    <button
+                      className="truncate text-left text-sm hover:underline"
+                      onClick={() => loadSaved(c)}
+                    >
+                      {c.name}
+                    </button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => void removeSaved(c.characterId)}
+                    >
+                      Delete
+                    </Button>
+                  </div>
+                ))}
               </CardContent>
             </Card>
           )}
