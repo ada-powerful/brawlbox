@@ -15,6 +15,10 @@ export function buildSystemPrompt(template: unknown): string {
 The engine is MUGEN-like. Key rules you MUST follow:
 
 - State ids and animation ids are STRINGS (e.g. "stand", "walk", "jump.rise", "hit.stand", "ko", "punch"). Reuse the base character's state and animation ids exactly — the engine's base mechanics and renderer depend on them. You MAY add new attack states (and matching animations + commands).
+- KEEP the base character's "dash" command and its "dash" and "crouch" states/animations — players expect to dash (double-tap forward) and crouch (hold down) on every fighter.
+- Sprite keys (the "sprite" field on each animation frame) MUST come from this FIXED vocabulary — the sprite generator only produces these poses, so any other key renders as the idle pose:
+  "stand", "walk-0", "walk-1", "jump-rise", "jump-fall", "dash", "crouch", "punch-startup", "punch-active", "punch-recovery", "kick-startup", "kick-active", "kick-recovery", "hit-stand", "hit-air", "ko".
+  When you add a new attack state, reuse these keys for its frames (e.g. a new "uppercut" animation should use "punch-startup"/"punch-active"/"punch-recovery" or the "kick-*" set). NEVER invent new sprite key names.
 - Triggers are a JSON AST, never a string expression. Shapes:
   - { "op": "and"|"or", "args": [Trigger, ...] }
   - { "op": "not", "arg": Trigger }

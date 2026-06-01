@@ -2,6 +2,8 @@ import { Container, Graphics, Text } from 'pixi.js';
 import type { World } from '../engine/world.ts';
 import { STAGE_WIDTH } from '../engine/world.ts';
 
+const TICKS_PER_SECOND = 60;
+
 const BAR_WIDTH = 300;
 const BAR_HEIGHT = 22;
 const BAR_Y = 30;
@@ -39,6 +41,35 @@ export class HealthBars {
   }
 }
 
+export class RoundTimer {
+  readonly gfx: Container;
+  private readonly text: Text;
+
+  constructor() {
+    this.gfx = new Container();
+    this.text = new Text({
+      text: '',
+      style: {
+        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+        fontSize: 32,
+        fill: 0xffffff,
+        fontWeight: 'bold',
+        align: 'center',
+      },
+    });
+    this.text.anchor.set(0.5, 0);
+    this.text.x = STAGE_WIDTH / 2;
+    this.text.y = 24;
+    this.gfx.addChild(this.text);
+  }
+
+  update(world: World): void {
+    // Show whole seconds, rounding up so the clock reads "30" on tick 0 and
+    // only hits "0" on the final tick.
+    this.text.text = String(Math.ceil(world.roundTime / TICKS_PER_SECOND));
+  }
+}
+
 export class MatchOverlay {
   readonly gfx: Container;
   private readonly text: Text;
@@ -68,10 +99,13 @@ export class MatchOverlay {
       return;
     }
     this.gfx.visible = true;
-    if (world.winner !== null) {
-      this.text.text = `PLAYER ${world.winner + 1} WINS\nPress R to restart`;
-    } else {
-      this.text.text = `DRAW\nPress R to restart`;
-    }
+    // roundTime only reaches 0 when the clock runs out — a KO ends the match
+    // before the timer decrements, so this cleanly distinguishes the two.
+    const timeUp = world.roundTime === 0;
+    const result =
+      world.winner !== null ? `PLAYER ${world.winner + 1} WINS` : 'DRAW';
+    this.text.text = timeUp
+      ? `TIME UP\n${result}\nPress R to restart`
+      : `${result}\nPress R to restart`;
   }
 }

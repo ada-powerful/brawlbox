@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button.tsx';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card.tsx';
 import { Input } from '@/components/ui/input.tsx';
@@ -24,11 +24,14 @@ import { applySpritesToCharacter } from '@/creator/image/pack.ts';
 import { packSprites } from '@/creator/image/packAtlas.ts';
 import type { Character } from '@/engine/schema.ts';
 import { Playtest } from '@/creator/Playtest.tsx';
+import { Headshot } from '@/creator/Headshot.tsx';
 import { FrameReview } from '@/creator/FrameReview.tsx';
 import {
   listCloudCharacters,
   saveCloudCharacter,
   deleteCloudCharacter,
+  renameCloudCharacter,
+  archiveCloudCharacter,
   shareCloudCharacter,
   listGallery,
   type CloudCharacter,
@@ -66,6 +69,8 @@ export function App() {
   const [status, setStatus] = useState<string | null>(null);
   const [character, setCharacter] = useState<Character | null>(null);
   const [atlasUrl, setAtlasUrl] = useState<string | undefined>(undefined);
+  // Which slot the user's fighter occupies in the playtest (default P2).
+  const [playerSide, setPlayerSide] = useState<'p1' | 'p2'>('p2');
   const [json, setJson] = useState('');
   const [model, setModel] = useState(IMAGE_MODEL);
   const [user, setUser] = useState<User | null>(null);
@@ -73,11 +78,15 @@ export function App() {
   const [savedError, setSavedError] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [gallery, setGallery] = useState<CloudCharacter[]>([]);
+  const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null);
+  const [showArchived, setShowArchived] = useState(false);
   // M2.3 frame-review: the retextured sheet (backend path) + the editable
   // spriteKey→frame mapping. `repacking` guards the console during a re-pack.
   const [sheet, setSheet] = useState<DetectedSheet | null>(null);
   const [selection, setSelection] = useState<Record<string, number>>({});
   const [repacking, setRepacking] = useState(false);
+  // Set when Escape cancels a rename, so the unmount-triggered blur doesn't save.
+  const cancelRenameRef = useRef(false);
 
   // Cloud storage is available when signed in to the backend.
   const canCloud = BACKEND_MODE && AUTH_ENABLED && !!API_BASE;
@@ -349,12 +358,51 @@ export function App() {
     setStatus(`Loaded "${c.name}".`);
   };
 
-  const removeSaved = async (id: string): Promise<void> => {
+  const removeSaved = async (c: CloudCharacter): Promise<void> => {
+    if (!canCloud || !API_BASE) return;
+    if (!window.confirm(`Permanently delete "${c.name}"? This can't be undone.`)) return;
+    const token = await getAccessToken();
+    if (!token) return;
+    try {
+      await deleteCloudCharacter(API_BASE, token, c.characterId);
+      await refreshSaved();
+      await refreshGallery();
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+
+  const renameSaved = async (id: string, name: string): Promise<void> => {
+    if (cancelRenameRef.current) {
+      cancelRenameRef.current = false;
+      return;
+    }
+    setRenaming(null);
+    const trimmed = name.trim();
+    if (!canCloud || !API_BASE || !trimmed) return;
+    const token = await getAccessToken();
+    if (!token) return;
+    try {
+      await renameCloudCharacter(API_BASE, token, id, trimmed);
+      // Keep the loaded character's name in sync if it's the one being renamed.
+      if (character?.meta.id === id) {
+        const next = { ...character, meta: { ...character.meta, name: trimmed } };
+        setCharacter(next);
+        setJson(JSON.stringify(next, null, 2));
+      }
+      await refreshSaved();
+      await refreshGallery();
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+
+  const setArchived = async (id: string, archived: boolean): Promise<void> => {
     if (!canCloud || !API_BASE) return;
     const token = await getAccessToken();
     if (!token) return;
     try {
-      await deleteCloudCharacter(API_BASE, token, id);
+      await archiveCloudCharacter(API_BASE, token, id, archived);
       await refreshSaved();
       await refreshGallery();
     } catch (e) {
@@ -386,6 +434,8 @@ export function App() {
   };
 
   const hasSprites = Boolean(atlasUrl);
+  const activeSaved = saved.filter((c) => !c.archived);
+  const archivedSaved = saved.filter((c) => c.archived);
 
   return (
     <div className="mx-auto flex min-h-screen max-w-[1400px] flex-col gap-4 p-4">
@@ -543,38 +593,98 @@ export function App() {
               <CardHeader>
                 <CardTitle>My characters</CardTitle>
               </CardHeader>
-              <CardContent className="flex flex-col gap-1">
+              <CardContent className="flex flex-col gap-2">
                 {savedError && <p className="text-sm text-destructive">{savedError}</p>}
                 {!savedError && saved.length === 0 && (
                   <p className="text-sm text-muted-foreground">
                     Characters you generate are saved here automatically and stay across sign-ins.
                   </p>
                 )}
-                {saved.map((c) => (
-                  <div key={c.characterId} className="flex items-center justify-between gap-2">
-                    <button
-                      className={`truncate text-left text-sm hover:underline ${
-                        character?.meta.id === c.characterId ? 'font-semibold text-primary' : ''
-                      }`}
-                      onClick={() => loadSaved(c)}
-                    >
-                      {c.name}
-                      {c.shared && <span className="ml-1 text-xs text-primary">· shared</span>}
-                    </button>
+                {activeSaved.map((c) => (
+                  <div key={c.characterId} className="flex items-center gap-2">
+                    <Headshot character={c.character} atlasUrl={c.atlasUrl} name={c.name} />
+                    {renaming?.id === c.characterId ? (
+                      <Input
+                        className="h-8 flex-1"
+                        autoFocus
+                        value={renaming.name}
+                        onChange={(e) => setRenaming({ id: c.characterId, name: e.target.value })}
+                        onBlur={() => void renameSaved(c.characterId, renaming.name)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') void renameSaved(c.characterId, renaming.name);
+                          if (e.key === 'Escape') {
+                            cancelRenameRef.current = true;
+                            setRenaming(null);
+                          }
+                        }}
+                      />
+                    ) : (
+                      <button
+                        className={`flex-1 truncate text-left text-sm hover:underline ${
+                          character?.meta.id === c.characterId ? 'font-semibold text-primary' : ''
+                        }`}
+                        onClick={() => loadSaved(c)}
+                      >
+                        {c.name}
+                        {c.shared && <span className="ml-1 text-xs text-primary">· shared</span>}
+                      </button>
+                    )}
                     <div className="flex shrink-0 items-center gap-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setRenaming({ id: c.characterId, name: c.name })}
+                      >
+                        Rename
+                      </Button>
                       <Button variant="ghost" size="sm" onClick={() => void toggleShare(c)}>
                         {c.shared ? 'Unshare' : 'Share'}
                       </Button>
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => void removeSaved(c.characterId)}
+                        onClick={() => void setArchived(c.characterId, true)}
                       >
-                        Delete
+                        Archive
                       </Button>
                     </div>
                   </div>
                 ))}
+
+                {archivedSaved.length > 0 && (
+                  <>
+                    <button
+                      className="mt-1 text-left text-xs text-muted-foreground hover:underline"
+                      onClick={() => setShowArchived((v) => !v)}
+                    >
+                      {showArchived ? '▾' : '▸'} Archived ({archivedSaved.length})
+                    </button>
+                    {showArchived &&
+                      archivedSaved.map((c) => (
+                        <div key={c.characterId} className="flex items-center gap-2 opacity-70">
+                          <Headshot character={c.character} atlasUrl={c.atlasUrl} name={c.name} />
+                          <span className="flex-1 truncate text-sm">{c.name}</span>
+                          <div className="flex shrink-0 items-center gap-1">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => void setArchived(c.characterId, false)}
+                            >
+                              Restore
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-destructive"
+                              onClick={() => void removeSaved(c)}
+                            >
+                              Delete
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                  </>
+                )}
               </CardContent>
             </Card>
           )}
@@ -608,9 +718,29 @@ export function App() {
             </span>
           </CardHeader>
           <CardContent>
-            <Playtest character={character} atlasUrl={atlasUrl} />
+            <div className="mb-2 flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">Play your fighter as</span>
+              <div className="flex gap-1">
+                <Button
+                  size="sm"
+                  variant={playerSide === 'p1' ? 'default' : 'outline'}
+                  onClick={() => setPlayerSide('p1')}
+                >
+                  P1
+                </Button>
+                <Button
+                  size="sm"
+                  variant={playerSide === 'p2' ? 'default' : 'outline'}
+                  onClick={() => setPlayerSide('p2')}
+                >
+                  P2
+                </Button>
+              </div>
+            </div>
+            <Playtest character={character} atlasUrl={atlasUrl} side={playerSide} />
             <p className="mt-2 text-xs text-muted-foreground">
-              Pink = base (P1). Blue = {character ? 'your fighter' : 'base'} (P2).
+              Pink = {playerSide === 'p1' && character ? 'your fighter' : 'base'} (P1). Blue ={' '}
+              {playerSide === 'p2' && character ? 'your fighter' : 'base'} (P2).
               {character &&
                 !hasSprites &&
                 ' Renders as a silhouette until you generate sprites (step 2).'}

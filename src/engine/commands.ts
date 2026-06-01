@@ -92,6 +92,13 @@ export function stepToMask(step: MotionStep, facing: 1 | -1): number {
   return mask;
 }
 
+function stepsEqual(a: MotionStep, b: MotionStep): boolean {
+  if (a.dir !== b.dir) return false;
+  if (a.buttons.length !== b.buttons.length) return false;
+  const bs = new Set(b.buttons);
+  return a.buttons.every((btn) => bs.has(btn));
+}
+
 export function matchMotion(
   motion: ParsedMotion,
   buffer: number[],
@@ -115,14 +122,32 @@ export function matchMotion(
   let stepIdx = motion.length - 2;
   const earliest = Math.max(0, lastBufIdx - windowTicks + 1);
 
+  // When the step we're matching is identical to the one after it (e.g. the two
+  // F's in a "F,F" dash), it must be a distinct press: require an intervening
+  // frame where the mask is released, so HOLDING forward never reads as a
+  // double-tap. Distinct steps (QCF's D→DF→F) need no such gap.
+  let needRelease = stepsEqual(motion[stepIdx]!, motion[stepIdx + 1]!);
+  let sawRelease = false;
+
   for (let i = lastBufIdx - 1; i >= earliest && stepIdx >= 0; i--) {
     const step = motion[stepIdx];
     if (!step) break;
     const buf = buffer[i];
     if (buf === undefined) continue;
     const stepMask = stepToMask(step, facing);
-    if ((buf & stepMask) === stepMask) {
+    const satisfied = (buf & stepMask) === stepMask;
+
+    if (needRelease && !sawRelease) {
+      if (!satisfied) sawRelease = true; // found the gap between the two taps
+      continue;
+    }
+
+    if (satisfied) {
       stepIdx--;
+      if (stepIdx >= 0) {
+        needRelease = stepsEqual(motion[stepIdx]!, motion[stepIdx + 1]!);
+        sawRelease = false;
+      }
     }
   }
 

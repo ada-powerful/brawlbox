@@ -57,10 +57,12 @@ export function stepStateMachine(
         break;
       case 'VelSet':
         if (c.x !== undefined) player.vel.x = c.x;
+        if (c.xForward !== undefined) player.vel.x = c.xForward * player.facing;
         if (c.y !== undefined) player.vel.y = c.y;
         break;
       case 'VelAdd':
         if (c.x !== undefined) player.vel.x += c.x;
+        if (c.xForward !== undefined) player.vel.x += c.xForward * player.facing;
         if (c.y !== undefined) player.vel.y += c.y;
         break;
       case 'CtrlSet':

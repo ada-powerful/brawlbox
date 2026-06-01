@@ -64,6 +64,20 @@ export function tick(world: World, characters: Record<string, Character>, inputs
     }
   }
 
+  // Round timer: count down, and on time-up decide by remaining life.
+  if (!world.matchOver) {
+    world.roundTime--;
+    if (world.roundTime <= 0) {
+      world.roundTime = 0;
+      world.matchOver = true;
+      const p0 = world.players[0];
+      const p1 = world.players[1];
+      if (p0 && p1) {
+        world.winner = p0.life > p1.life ? 0 : p1.life > p0.life ? 1 : null;
+      }
+    }
+  }
+
   applyPushCollision(world, characters);
 
   world.tick++;

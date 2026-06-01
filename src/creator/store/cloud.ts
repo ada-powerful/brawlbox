@@ -12,6 +12,8 @@ export interface CloudCharacter {
   atlasUrl?: string;
   /** Whether this character is published to the public gallery. */
   shared?: boolean;
+  /** Whether the owner has archived (hidden) this character. */
+  archived?: boolean;
 }
 
 async function blobToBase64(blob: Blob): Promise<string> {
@@ -61,6 +63,36 @@ export async function deleteCloudCharacter(
     headers: authHeaders(token),
   });
   if (!res.ok) throw new Error(`Delete failed (${res.status})`);
+}
+
+/** Rename one of the caller's characters (updates list name + in-game meta.name). */
+export async function renameCloudCharacter(
+  baseUrl: string,
+  token: string,
+  characterId: string,
+  name: string,
+): Promise<void> {
+  const res = await fetch(`${baseUrl}/characters/${encodeURIComponent(characterId)}`, {
+    method: 'PATCH',
+    headers: authHeaders(token),
+    body: JSON.stringify({ name }),
+  });
+  if (!res.ok) throw new Error(`Rename failed (${res.status})`);
+}
+
+/** Soft-archive or restore one of the caller's characters. */
+export async function archiveCloudCharacter(
+  baseUrl: string,
+  token: string,
+  characterId: string,
+  archived: boolean,
+): Promise<void> {
+  const res = await fetch(`${baseUrl}/characters/${encodeURIComponent(characterId)}`, {
+    method: 'PATCH',
+    headers: authHeaders(token),
+    body: JSON.stringify({ archived }),
+  });
+  if (!res.ok) throw new Error(`${archived ? 'Archive' : 'Restore'} failed (${res.status})`);
 }
 
 /** Publish/unpublish one of the caller's characters to the public gallery. */

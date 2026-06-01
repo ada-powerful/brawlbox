@@ -1,7 +1,13 @@
 import { describe, expect, test } from 'vitest';
 import { tick } from '../src/engine/tick.ts';
 import { parseCharacter } from '../src/engine/schema.ts';
-import { Btn, createWorld, STAGE_LEFT_X, STAGE_RIGHT_X } from '../src/engine/world.ts';
+import {
+  Btn,
+  createWorld,
+  ROUND_TIME_TICKS,
+  STAGE_LEFT_X,
+  STAGE_RIGHT_X,
+} from '../src/engine/world.ts';
 import type { Inputs } from '../src/engine/world.ts';
 import baseChar from '../characters/base/character.json' with { type: 'json' };
 
@@ -148,6 +154,28 @@ describe('tick (state-machine driven)', () => {
     w.players[0]!.life = 0;
     w.players[1]!.life = 0;
     tick(w, characters, noInput);
+    expect(w.matchOver).toBe(true);
+    expect(w.winner).toBeNull();
+  });
+
+  test('round timer counts down from 30 seconds and ends match on time-up', () => {
+    const w = createWorld();
+    expect(w.roundTime).toBe(ROUND_TIME_TICKS);
+    expect(ROUND_TIME_TICKS).toBe(30 * 60);
+    // P1 ahead on life — should win when the clock runs out.
+    w.players[0]!.life = 800;
+    w.players[1]!.life = 400;
+    for (let i = 0; i < ROUND_TIME_TICKS; i++) tick(w, characters, noInput);
+    expect(w.roundTime).toBe(0);
+    expect(w.matchOver).toBe(true);
+    expect(w.winner).toBe(0);
+  });
+
+  test('time-up with equal life is a draw', () => {
+    const w = createWorld();
+    w.players[0]!.life = 500;
+    w.players[1]!.life = 500;
+    for (let i = 0; i < ROUND_TIME_TICKS; i++) tick(w, characters, noInput);
     expect(w.matchOver).toBe(true);
     expect(w.winner).toBeNull();
   });

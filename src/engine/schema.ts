@@ -148,12 +148,16 @@ const ControllerSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('VelSet'),
     x: z.number().optional(),
+    // Facing-relative horizontal velocity: vel.x = xForward * facing. Mirrors
+    // the HitDef.groundVelocity.x convention so movement reads "forward" not "right".
+    xForward: z.number().optional(),
     y: z.number().optional(),
     trigger: TriggerSchema,
   }),
   z.object({
     type: z.literal('VelAdd'),
     x: z.number().optional(),
+    xForward: z.number().optional(),
     y: z.number().optional(),
     trigger: TriggerSchema,
   }),

@@ -8,6 +8,9 @@ export const GROUND_Y_SCREEN = 460;
 export const STAGE_LEFT_X = 40;
 export const STAGE_RIGHT_X = 920;
 
+/** Round length in simulation ticks (60Hz). 30 seconds. */
+export const ROUND_TIME_TICKS = 30 * 60;
+
 export const Btn = {
   Up: 1 << 0,
   Down: 1 << 1,
@@ -51,6 +54,8 @@ export interface World {
   players: Player[];
   matchOver: boolean;
   winner: number | null;
+  /** Ticks remaining in the round; counts down from ROUND_TIME_TICKS to 0. */
+  roundTime: number;
 }
 
 export function createWorld(p1Char = 'base', p2Char = 'base'): World {
@@ -58,6 +63,7 @@ export function createWorld(p1Char = 'base', p2Char = 'base'): World {
     tick: 0,
     matchOver: false,
     winner: null,
+    roundTime: ROUND_TIME_TICKS,
     players: [
       {
         characterId: p1Char,
