@@ -19,5 +19,13 @@ export default defineConfig({
   build: {
     target: 'es2022',
     sourcemap: true,
+    rollupOptions: {
+      // Two entries: the creator (index.html) and the backend-free engine
+      // sandbox (sandbox.html, served at /sandbox.html).
+      input: {
+        main: fileURLToPath(new URL('./index.html', import.meta.url)),
+        sandbox: fileURLToPath(new URL('./sandbox.html', import.meta.url)),
+      },
+    },
   },
 });
