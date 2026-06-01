@@ -75,6 +75,42 @@ describe('tick (state-machine driven)', () => {
     expect(w.players[0]!.pos.y).toBe(0);
   });
 
+  test('player auto-turns to face opponent when actionable (crossup)', () => {
+    const w = createWorld();
+    // P1 left of P2, facing right toward P2.
+    w.players[0]!.pos.x = 400;
+    w.players[1]!.pos.x = 600;
+    tick(w, characters, noInput);
+    expect(w.players[0]!.facing).toBe(1);
+
+    // P1 crosses to the right of P2 (as it would after jumping over).
+    w.players[0]!.pos.x = 700;
+    tick(w, characters, noInput);
+    expect(w.players[0]!.facing).toBe(-1);
+  });
+
+  test('airborne player does not turn mid-jump; turns on landing', () => {
+    const w = createWorld();
+    w.players[0]!.pos.x = 400;
+    w.players[1]!.pos.x = 600;
+    tick(w, characters, p1Up);
+    expect(w.players[0]!.stateId).toBe('jump');
+    expect(w.players[0]!.ctrl).toBe(false);
+
+    // Force P1 past P2 while airborne — facing must stay put (enables crossups).
+    w.players[0]!.pos.x = 700;
+    tick(w, characters, noInput);
+    expect(w.players[0]!.facing).toBe(1);
+
+    // Let the jump complete; on returning to stand it turns to face P2.
+    for (let i = 0; i < 200; i++) {
+      tick(w, characters, noInput);
+      if (w.players[0]!.stateId === 'stand') break;
+    }
+    expect(w.players[0]!.stateId).toBe('stand');
+    expect(w.players[0]!.facing).toBe(-1);
+  });
+
   test('punch in range hits opponent and reduces life', () => {
     const w = createWorld();
     w.players[0]!.pos.x = 320;

@@ -17,8 +17,12 @@ function makePlayer(animId = 'test', animFrame = 0, animTime = 0): Player {
     animTime,
     inputBuffer: [],
     life: 1000,
+    power: 0,
+    halfWidth: 30,
     hitPause: 0,
     activeHitDef: null,
+    activeThrow: null,
+    bind: null,
   };
 }
 

@@ -12,7 +12,13 @@ export type Value =
         | 'vel.y'
         | 'pos.x'
         | 'pos.y'
-        | 'life';
+        | 'life'
+        | 'power'
+        | 'p2BodyDist'
+        | 'p2Dist.x'
+        | 'p2.pos.y'
+        | 'p2.life'
+        | 'p2.stateNo';
     };
 
 export type Trigger =
@@ -39,6 +45,12 @@ const ValueSchema: z.ZodType<Value> = z.union([
       'pos.x',
       'pos.y',
       'life',
+      'power',
+      'p2BodyDist',
+      'p2Dist.x',
+      'p2.pos.y',
+      'p2.life',
+      'p2.stateNo',
     ]),
   }),
 ]);
@@ -126,12 +138,29 @@ const HitDefSchema = z.object({
   sound: z.string().optional(),
 });
 
+// A throw is range-based, not hitbox-based: the attacker arms a grab and, if a
+// grabbable victim is within `range` (edge-to-edge body distance on x, height on
+// y), the victim is BOUND to the attacker for `bindTime` ticks at `bindPos`
+// (facing-relative offset), then released with `throwVel` into `releaseState`.
+// `attackerState` is the attacker's own throw-animation state. `releaseState` is
+// a state in the VICTIM's character (defaults to 'hit.air'; runtime falls back).
+const ThrowDefSchema = z.object({
+  range: z.object({ x: z.number().nonnegative(), y: z.number().nonnegative() }),
+  damage: z.number().nonnegative(),
+  attackerState: z.string().min(1),
+  releaseState: z.string().min(1).default('hit.air'),
+  bindTime: z.number().int().nonnegative(),
+  bindPos: Vec2Schema,
+  throwVel: Vec2Schema,
+});
+
 export type AABB = z.infer<typeof AABBSchema>;
 export type FrameRect = z.infer<typeof FrameRectSchema>;
 export type AnimFrame = z.infer<typeof AnimFrameSchema>;
 export type Animation = z.infer<typeof AnimationSchema>;
 export type Command = z.infer<typeof CommandSchema>;
 export type HitDef = z.infer<typeof HitDefSchema>;
+export type ThrowDef = z.infer<typeof ThrowDefSchema>;
 
 const ControllerSchema = z.discriminatedUnion('type', [
   z.object({
@@ -169,6 +198,21 @@ const ControllerSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('HitDef'),
     def: HitDefSchema,
+    trigger: TriggerSchema,
+  }),
+  z.object({
+    type: z.literal('PowerAdd'),
+    value: z.number(),
+    trigger: TriggerSchema,
+  }),
+  z.object({
+    type: z.literal('PowerSet'),
+    value: z.number(),
+    trigger: TriggerSchema,
+  }),
+  z.object({
+    type: z.literal('Throw'),
+    def: ThrowDefSchema,
     trigger: TriggerSchema,
   }),
 ]);
@@ -232,6 +276,7 @@ export {
   FrameRectSchema,
   HitDefSchema,
   StateSchema,
+  ThrowDefSchema,
   TriggerSchema,
   ValueSchema,
 };
@@ -262,6 +307,13 @@ function validateReferences(c: Character): void {
       if (ctrl.type === 'ChangeAnim' && !knownAnims.has(ctrl.value)) {
         throw new Error(
           `Character "${c.meta.id}": state "${stateId}" has ChangeAnim to unknown animation "${ctrl.value}"`,
+        );
+      }
+      // A Throw's attackerState is in this character; releaseState is a victim
+      // state (validated at runtime against the victim, with a fallback).
+      if (ctrl.type === 'Throw' && !knownStates.has(ctrl.def.attackerState)) {
+        throw new Error(
+          `Character "${c.meta.id}": state "${stateId}" has Throw to unknown attackerState "${ctrl.def.attackerState}"`,
         );
       }
       checkCommandRefs(ctrl.trigger, knownCommands, c.meta.id, stateId);

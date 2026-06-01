@@ -93,8 +93,48 @@ function evalValue(v: Value, ctx: TriggerCtx): number | string | boolean {
     case 'pos.y':
       return ctx.player.pos.y;
     case 'life':
-      return 1000;
+      return ctx.player.life;
+    case 'power':
+      return ctx.player.power;
+    case 'p2BodyDist': {
+      const opp = findOpponent(ctx);
+      if (!opp) return 0;
+      return (
+        Math.abs(ctx.player.pos.x - opp.pos.x) - ctx.player.halfWidth - opp.halfWidth
+      );
+    }
+    case 'p2Dist.x': {
+      const opp = findOpponent(ctx);
+      if (!opp) return 0;
+      return (opp.pos.x - ctx.player.pos.x) * ctx.player.facing;
+    }
+    case 'p2.pos.y': {
+      const opp = findOpponent(ctx);
+      if (!opp) return 0;
+      return opp.pos.y;
+    }
+    case 'p2.life': {
+      const opp = findOpponent(ctx);
+      if (!opp) return 0;
+      return opp.life;
+    }
+    case 'p2.stateNo': {
+      const opp = findOpponent(ctx);
+      if (!opp) return '';
+      return opp.stateId;
+    }
   }
+}
+
+/** First non-null player whose index differs from the self player index. */
+function findOpponent(ctx: TriggerCtx): Player | undefined {
+  const players = ctx.world.players;
+  for (let i = 0; i < players.length; i++) {
+    if (i === ctx.playerIndex) continue;
+    const p = players[i];
+    if (p) return p;
+  }
+  return undefined;
 }
 
 function evalFlag(

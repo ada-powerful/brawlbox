@@ -12,6 +12,7 @@ export function applyHits(
     const attacker = world.players[e.attackerIdx];
     const victim = world.players[e.victimIdx];
     if (!attacker || !victim || !attacker.activeHitDef) continue;
+    if (victim.bind !== null) continue;
     const vc = characters[victim.characterId];
     if (!vc) continue;
     applyHit(attacker, victim, attacker.activeHitDef, vc);

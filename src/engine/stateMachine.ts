@@ -1,6 +1,7 @@
 import { setAnimation } from './animation.ts';
 import type { Character } from './schema.ts';
 import type { Inputs, Player, World } from './world.ts';
+import { MAX_POWER } from './world.ts';
 import { evalTrigger } from './triggers.ts';
 
 export function applyStateHeader(p: Player, character: Character, stateId: string): void {
@@ -48,6 +49,7 @@ export function stepStateMachine(
         player.stateId = c.value;
         player.stateTime = 0;
         player.activeHitDef = null;
+        player.activeThrow = null;
         applyStateHeader(player, character, c.value);
         if (c.ctrl !== undefined) player.ctrl = c.ctrl === 1;
         changed = true;
@@ -71,6 +73,15 @@ export function stepStateMachine(
       case 'HitDef':
         player.activeHitDef = c.def;
         break;
+      case 'PowerAdd':
+        player.power = clampPower(player.power + c.value);
+        break;
+      case 'PowerSet':
+        player.power = clampPower(c.value);
+        break;
+      case 'Throw':
+        player.activeThrow = c.def;
+        break;
     }
 
     if (changed) break;
@@ -79,4 +90,10 @@ export function stepStateMachine(
   if (!changed) {
     player.stateTime++;
   }
+}
+
+function clampPower(value: number): number {
+  if (value < 0) return 0;
+  if (value > MAX_POWER) return MAX_POWER;
+  return value;
 }

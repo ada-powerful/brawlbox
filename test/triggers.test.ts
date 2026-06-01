@@ -137,6 +137,94 @@ describe('evalTrigger', () => {
         true,
       );
     });
+
+    test('life reads real player.life', () => {
+      const c = ctx();
+      c.player.life = 742;
+      expect(evalTrigger({ op: 'eq', left: { ref: 'life' }, right: { const: 742 } }, c)).toBe(true);
+      expect(evalTrigger({ op: 'eq', left: { ref: 'life' }, right: { const: 1000 } }, c)).toBe(
+        false,
+      );
+    });
+
+    test('power reads player.power', () => {
+      const c = ctx();
+      c.player.power = 1500;
+      expect(evalTrigger({ op: 'eq', left: { ref: 'power' }, right: { const: 1500 } }, c)).toBe(
+        true,
+      );
+    });
+  });
+
+  describe('opponent refs', () => {
+    test('p2Dist.x is positive when opponent is in front and flips with facing', () => {
+      const world = createWorld();
+      const p1 = world.players[0]!;
+      const p2 = world.players[1]!;
+      p1.pos.x = 300;
+      p2.pos.x = 500; // opponent 200 to the right
+      const c = ctx({ world, player: p1, playerIndex: 0 });
+
+      p1.facing = 1; // facing right, opponent in front
+      expect(evalTrigger({ op: 'eq', left: { ref: 'p2Dist.x' }, right: { const: 200 } }, c)).toBe(
+        true,
+      );
+
+      p1.facing = -1; // facing left, opponent behind -> negative
+      expect(evalTrigger({ op: 'eq', left: { ref: 'p2Dist.x' }, right: { const: -200 } }, c)).toBe(
+        true,
+      );
+    });
+
+    test('p2BodyDist subtracts both half-widths', () => {
+      const world = createWorld();
+      const p1 = world.players[0]!;
+      const p2 = world.players[1]!;
+      p1.pos.x = 300;
+      p2.pos.x = 500; // center gap 200
+      p1.halfWidth = 30;
+      p2.halfWidth = 30; // 200 - 30 - 30 = 140
+      const c = ctx({ world, player: p1, playerIndex: 0 });
+      expect(
+        evalTrigger({ op: 'eq', left: { ref: 'p2BodyDist' }, right: { const: 140 } }, c),
+      ).toBe(true);
+    });
+
+    test('p2.life / p2.pos.y / p2.stateNo read the opponent', () => {
+      const world = createWorld();
+      const p1 = world.players[0]!;
+      const p2 = world.players[1]!;
+      p2.life = 333;
+      p2.pos.y = 88;
+      p2.stateId = 'jump';
+      const c = ctx({ world, player: p1, playerIndex: 0 });
+      expect(evalTrigger({ op: 'eq', left: { ref: 'p2.life' }, right: { const: 333 } }, c)).toBe(
+        true,
+      );
+      expect(evalTrigger({ op: 'eq', left: { ref: 'p2.pos.y' }, right: { const: 88 } }, c)).toBe(
+        true,
+      );
+      expect(
+        evalTrigger({ op: 'eq', left: { ref: 'p2.stateNo' }, right: { const: 'jump' } }, c),
+      ).toBe(true);
+    });
+
+    test('neutral values when no opponent exists', () => {
+      const world = createWorld();
+      const p1 = world.players[0]!;
+      // single-player world: drop the opponent
+      world.players.length = 1;
+      const c = ctx({ world, player: p1, playerIndex: 0 });
+      expect(evalTrigger({ op: 'eq', left: { ref: 'p2.life' }, right: { const: 0 } }, c)).toBe(
+        true,
+      );
+      expect(evalTrigger({ op: 'eq', left: { ref: 'p2Dist.x' }, right: { const: 0 } }, c)).toBe(
+        true,
+      );
+      expect(evalTrigger({ op: 'eq', left: { ref: 'p2.stateNo' }, right: { const: '' } }, c)).toBe(
+        true,
+      );
+    });
   });
 
   describe('flags', () => {

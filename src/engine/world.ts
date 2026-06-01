@@ -1,4 +1,4 @@
-import type { HitDef } from './schema.ts';
+import type { HitDef, ThrowDef } from './schema.ts';
 import type { Vec2 } from './vec.ts';
 import { vec } from './vec.ts';
 
@@ -10,6 +10,9 @@ export const STAGE_RIGHT_X = 920;
 
 /** Round length in simulation ticks (60Hz). 30 seconds. */
 export const ROUND_TIME_TICKS = 30 * 60;
+
+/** Maximum power-meter value. */
+export const MAX_POWER = 3000;
 
 export const Btn = {
   Up: 1 << 0,
@@ -32,6 +35,19 @@ export interface Inputs {
   players: PlayerInput[];
 }
 
+/**
+ * A victim's "being thrown" state: position-locked to `thrower` at `pos`
+ * (facing-relative offset) for `time` more ticks, then released with
+ * `releaseVel` (x is facing-relative) into `releaseState`.
+ */
+export interface BindState {
+  thrower: number;
+  time: number;
+  pos: Vec2;
+  releaseVel: Vec2;
+  releaseState: string;
+}
+
 export interface Player {
   characterId: string;
   pos: Vec2;
@@ -45,8 +61,15 @@ export interface Player {
   animTime: number;
   inputBuffer: number[];
   life: number;
+  power: number;
+  /** Half of the player's collision/body width, used for body-distance refs. */
+  halfWidth: number;
   hitPause: number;
   activeHitDef: HitDef | null;
+  /** Armed grab attempt (mirrors activeHitDef); resolved by detectThrows. */
+  activeThrow: ThrowDef | null;
+  /** Non-null while this player is held in an opponent's throw. */
+  bind: BindState | null;
 }
 
 export interface World {
@@ -78,8 +101,12 @@ export function createWorld(p1Char = 'base', p2Char = 'base'): World {
         animTime: 0,
         inputBuffer: [],
         life: 1000,
+        power: 0,
+        halfWidth: 30,
         hitPause: 0,
         activeHitDef: null,
+        activeThrow: null,
+        bind: null,
       },
       {
         characterId: p2Char,
@@ -94,8 +121,12 @@ export function createWorld(p1Char = 'base', p2Char = 'base'): World {
         animTime: 0,
         inputBuffer: [],
         life: 1000,
+        power: 0,
+        halfWidth: 30,
         hitPause: 0,
         activeHitDef: null,
+        activeThrow: null,
+        bind: null,
       },
     ],
   };

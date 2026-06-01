@@ -41,7 +41,7 @@ export function detectHits(world: World, characters: Record<string, Character>):
   for (let i = 0; i < world.players.length; i++) {
     const attacker = world.players[i];
     if (!attacker || !attacker.activeHitDef) continue;
-    if (attacker.hitPause > 0) continue;
+    if (attacker.hitPause > 0 || attacker.bind !== null) continue;
     const aChar = characters[attacker.characterId];
     if (!aChar) continue;
     const aFrame = getActiveFrame(attacker, aChar);
@@ -50,7 +50,7 @@ export function detectHits(world: World, characters: Record<string, Character>):
     for (let j = 0; j < world.players.length; j++) {
       if (i === j) continue;
       const victim = world.players[j];
-      if (!victim || victim.hitPause > 0) continue;
+      if (!victim || victim.hitPause > 0 || victim.bind !== null) continue;
       const vChar = characters[victim.characterId];
       if (!vChar) continue;
       const vFrame = getActiveFrame(victim, vChar);
@@ -84,6 +84,8 @@ export function applyPushCollision(world: World, characters: Record<string, Char
       const b = world.players[j];
       if (!a || !b) continue;
       if (a.hitPause > 0 || b.hitPause > 0) continue;
+      // Bound players are position-locked to their thrower; don't push them.
+      if (a.bind !== null || b.bind !== null) continue;
       pushPair(a, b, characters);
     }
   }

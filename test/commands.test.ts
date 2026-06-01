@@ -64,6 +64,42 @@ describe('parseMotion', () => {
     expect(() => parseMotion('')).toThrow();
     expect(() => parseMotion('   ')).toThrow();
   });
+
+  test('parses charge step [B]30', () => {
+    expect(parseMotion('[B]30')).toEqual([{ dir: 'B', buttons: [], charge: 30 }]);
+  });
+
+  test('charge motion [D]30,U,a yields 3 steps with charge on first', () => {
+    expect(parseMotion('[D]30, U, a')).toEqual([
+      { dir: 'D', buttons: [], charge: 30 },
+      { dir: 'U', buttons: [] },
+      { dir: null, buttons: ['a'] },
+    ]);
+  });
+
+  test('charge accepts compound directions [DB]40', () => {
+    expect(parseMotion('[DB]40')).toEqual([{ dir: 'DB', buttons: [], charge: 40 }]);
+  });
+
+  test('Headbutt [B]30,F,x parses', () => {
+    expect(parseMotion('[B]30, F, x')).toEqual([
+      { dir: 'B', buttons: [], charge: 30 },
+      { dir: 'F', buttons: [] },
+      { dir: null, buttons: ['x'] },
+    ]);
+  });
+
+  test('parses held-direction /F', () => {
+    expect(parseMotion('/F')).toEqual([{ dir: 'F', buttons: [], hold: true }]);
+  });
+
+  test('parses held-direction with button /F+z', () => {
+    expect(parseMotion('/F+z')).toEqual([{ dir: 'F', buttons: ['z'], hold: true }]);
+  });
+
+  test('throws on charge with bad direction', () => {
+    expect(() => parseMotion('[Q]30')).toThrow();
+  });
 });
 
 describe('stepToMask', () => {
@@ -152,6 +188,83 @@ describe('matchMotion', () => {
     expect(matchMotion(motion, [Btn.Right | Btn.X], 1, 15)).toBe(true);
     expect(matchMotion(motion, [Btn.Right], 1, 15)).toBe(false);
     expect(matchMotion(motion, [Btn.X], 1, 15)).toBe(false);
+  });
+
+  test('charge [B]30,F,x matches with >=30 held Back then F then x', () => {
+    const motion = parseMotion('[B]30, F, x');
+    // 30 frames of Back held, then Forward, then Forward+x (current).
+    const buf = [
+      ...Array(30).fill(Btn.Left), // Back (facing right => Left)
+      Btn.Right,
+      Btn.Right | Btn.X,
+    ];
+    expect(matchMotion(motion, buf, 1, 15)).toBe(true);
+  });
+
+  test('charge boundary: exactly 30 held frames matches', () => {
+    const motion = parseMotion('[B]30, F, x');
+    const buf = [...Array(30).fill(Btn.Left), Btn.Right, Btn.Right | Btn.X];
+    expect(matchMotion(motion, buf, 1, 15)).toBe(true);
+  });
+
+  test('charge does not match when back held < 30 frames', () => {
+    const motion = parseMotion('[B]30, F, x');
+    const buf = [...Array(29).fill(Btn.Left), Btn.Right, Btn.Right | Btn.X];
+    expect(matchMotion(motion, buf, 1, 15)).toBe(false);
+  });
+
+  test('charge does not match when F+x come without preceding charge', () => {
+    const motion = parseMotion('[B]30, F, x');
+    // No Back hold at all, just F then x.
+    const buf = [0, 0, 0, Btn.Right, Btn.Right | Btn.X];
+    expect(matchMotion(motion, buf, 1, 15)).toBe(false);
+  });
+
+  test('charge run may extend further back than windowTicks', () => {
+    const motion = parseMotion('[B]30, F, x');
+    // 50 frames of charge with a small release window for F,x. Charge >> window.
+    const buf = [...Array(50).fill(Btn.Left), Btn.Right, Btn.Right | Btn.X];
+    expect(matchMotion(motion, buf, 1, 5)).toBe(true);
+  });
+
+  test('charge run interrupted (released mid-hold) does not match', () => {
+    const motion = parseMotion('[B]30, F, x');
+    // 15 held, a gap, 15 held => no single run of 30.
+    const buf = [
+      ...Array(15).fill(Btn.Left),
+      0,
+      ...Array(15).fill(Btn.Left),
+      Btn.Right,
+      Btn.Right | Btn.X,
+    ];
+    expect(matchMotion(motion, buf, 1, 15)).toBe(false);
+  });
+
+  test('charge facing flip: facing left uses Right for Back', () => {
+    const motion = parseMotion('[B]30, F, x');
+    // facing -1: Back => Right, Forward => Left.
+    const buf = [...Array(30).fill(Btn.Right), Btn.Left, Btn.Left | Btn.X];
+    expect(matchMotion(motion, buf, -1, 15)).toBe(true);
+  });
+
+  test('sumo splash [D]30,U,a matches', () => {
+    const motion = parseMotion('[D]30, U, a');
+    const buf = [...Array(30).fill(Btn.Down), Btn.Up, Btn.Up | Btn.A];
+    expect(matchMotion(motion, buf, 1, 15)).toBe(true);
+  });
+
+  test('held-direction /F,z matches when F held while z pressed', () => {
+    const motion = parseMotion('/F, z');
+    // F held continuously (no release) then z pressed while still holding F.
+    const buf = [Btn.Right, Btn.Right, Btn.Right | Btn.Z];
+    expect(matchMotion(motion, buf, 1, 15)).toBe(true);
+  });
+
+  test('held-direction /F,z matches without requiring an F release gap', () => {
+    const motion = parseMotion('/F, z');
+    // Last frame: F+z. Prior frame: F still held (no gap). Should match.
+    const buf = [Btn.Right, Btn.Right | Btn.Z];
+    expect(matchMotion(motion, buf, 1, 15)).toBe(true);
   });
 });
 

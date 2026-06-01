@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { stepStateMachine } from '../src/engine/stateMachine.ts';
 import { parseCharacter, type Character } from '../src/engine/schema.ts';
-import { Btn, createWorld } from '../src/engine/world.ts';
+import { Btn, MAX_POWER, createWorld } from '../src/engine/world.ts';
 import baseChar from '../characters/base/character.json' with { type: 'json' };
 
 const base = parseCharacter(baseChar);
@@ -335,6 +335,94 @@ describe('stepStateMachine', () => {
     p.vel.x = 2;
     stepStateMachine(p, c, { world, inputs: { players: [{ buttons: 0 }, { buttons: 0 }] }, playerIndex: 0 });
     expect(p.vel.x).toBe(7); // 2 + 5 * facing(1)
+  });
+
+  test('PowerAdd accumulates and clamps at MAX_POWER', () => {
+    const c = makeCharacter({
+      stand: {
+        type: 'S',
+        moveType: 'I',
+        physics: 'S',
+        controllers: [
+          {
+            type: 'PowerAdd',
+            value: 500,
+            trigger: { op: 'eq', left: { const: 1 }, right: { const: 1 } },
+          },
+        ],
+      },
+    });
+    const world = createWorld();
+    const p = world.players[0]!;
+    expect(p.power).toBe(0);
+    stepStateMachine(p, c, { world, inputs: { players: [{ buttons: 0 }, { buttons: 0 }] }, playerIndex: 0 });
+    expect(p.power).toBe(500);
+
+    p.power = MAX_POWER - 100;
+    stepStateMachine(p, c, { world, inputs: { players: [{ buttons: 0 }, { buttons: 0 }] }, playerIndex: 0 });
+    expect(p.power).toBe(MAX_POWER); // clamped, not 3400
+  });
+
+  test('PowerSet sets the value and PowerAdd floors at 0', () => {
+    const setChar = makeCharacter({
+      stand: {
+        type: 'S',
+        moveType: 'I',
+        physics: 'S',
+        controllers: [
+          {
+            type: 'PowerSet',
+            value: 1200,
+            trigger: { op: 'eq', left: { const: 1 }, right: { const: 1 } },
+          },
+        ],
+      },
+    });
+    const world = createWorld();
+    const p = world.players[0]!;
+    p.power = 50;
+    stepStateMachine(p, setChar, { world, inputs: { players: [{ buttons: 0 }, { buttons: 0 }] }, playerIndex: 0 });
+    expect(p.power).toBe(1200);
+
+    const drainChar = makeCharacter({
+      stand: {
+        type: 'S',
+        moveType: 'I',
+        physics: 'S',
+        controllers: [
+          {
+            type: 'PowerAdd',
+            value: -5000,
+            trigger: { op: 'eq', left: { const: 1 }, right: { const: 1 } },
+          },
+        ],
+      },
+    });
+    stepStateMachine(p, drainChar, { world, inputs: { players: [{ buttons: 0 }, { buttons: 0 }] }, playerIndex: 0 });
+    expect(p.power).toBe(0); // floored
+  });
+
+  test('Power controllers do not change state', () => {
+    const c = makeCharacter({
+      stand: {
+        type: 'S',
+        moveType: 'I',
+        physics: 'S',
+        controllers: [
+          {
+            type: 'PowerAdd',
+            value: 100,
+            trigger: { op: 'eq', left: { const: 1 }, right: { const: 1 } },
+          },
+        ],
+      },
+    });
+    const world = createWorld();
+    const p = world.players[0]!;
+    p.stateTime = 4;
+    stepStateMachine(p, c, { world, inputs: { players: [{ buttons: 0 }, { buttons: 0 }] }, playerIndex: 0 });
+    expect(p.stateId).toBe('stand');
+    expect(p.stateTime).toBe(5); // incremented, no state change
   });
 
   test('unknown stateId falls back to stand', () => {
