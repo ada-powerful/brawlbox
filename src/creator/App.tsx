@@ -35,6 +35,14 @@ import {
 
 const EXAMPLE = 'a stone golem brawler with a slow, heavy uppercut and lots of health';
 
+// The LLM picks meta.id (e.g. two "golem" prompts can collide). The cloud record
+// is keyed by meta.id, so a short random suffix keeps every generated character a
+// distinct record — auto-save then never clobbers a previously saved fighter.
+const withUniqueId = (c: Character): Character => ({
+  ...c,
+  meta: { ...c.meta, id: `${c.meta.id}-${crypto.randomUUID().slice(0, 8)}` },
+});
+
 // A key from .env (if any) takes over — the manual key card is then hidden.
 const ENV_KEY = getEnvKey();
 // When set, character generation goes through the BrawlBox backend (key lives
@@ -61,8 +69,9 @@ export function App() {
   const [model, setModel] = useState(IMAGE_MODEL);
   const [user, setUser] = useState<User | null>(null);
   const [saved, setSaved] = useState<CloudCharacter[]>([]);
+  const [savedError, setSavedError] = useState<string | null>(null);
+  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [gallery, setGallery] = useState<CloudCharacter[]>([]);
-  const [atlasBlob, setAtlasBlob] = useState<Blob | null>(null);
 
   // Cloud storage is available when signed in to the backend.
   const canCloud = BACKEND_MODE && AUTH_ENABLED && !!API_BASE;
@@ -76,9 +85,14 @@ export function App() {
     if (!canCloud || !user || !API_BASE) return;
     try {
       const token = await getAccessToken();
-      if (token) setSaved(await listCloudCharacters(API_BASE, token));
-    } catch {
-      /* non-fatal */
+      if (token) {
+        setSaved(await listCloudCharacters(API_BASE, token));
+        setSavedError(null);
+      }
+    } catch (e) {
+      // Surface the failure: an empty list and a load error look identical to
+      // the user otherwise, hiding real backend/auth problems.
+      setSavedError(`Couldn't load your saved characters (${(e as Error).message}).`);
     }
   };
 
@@ -173,13 +187,16 @@ export function App() {
         BACKEND_MODE && API_BASE
           ? await generateCharacterViaBackend(API_BASE, { prompt: prompt.trim() }, token)
           : await generateCharacter({ prompt: prompt.trim() }, createOpenAIProvider(key!));
+      // Give it a unique id so auto-save can't clobber a prior fighter that the
+      // LLM happened to give the same meta.id.
+      const newChar = withUniqueId(result.character);
       swapAtlasUrl(undefined); // new config => drop old sprites
-      setAtlasBlob(null);
-      setCharacter(result.character);
-      setJson(JSON.stringify(result.character, null, 2));
+      setCharacter(newChar);
+      setJson(JSON.stringify(newChar, null, 2));
       setStatus(
         `Valid character generated in ${result.attempts} attempt(s). Now generate sprites.`,
       );
+      void autoSave(newChar); // persist immediately so it survives sign-out
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -209,7 +226,10 @@ export function App() {
       if (BACKEND_MODE && API_BASE) {
         // fal-retextured template sheet, sliced to per-key frames on black bg.
         images = await generateSpritesViaBackend(API_BASE, prompt.trim(), character, token);
-        packed = await packSprites(images, { chromaKey: { r: 0, g: 0, b: 0 }, chromaTolerance: 90 });
+        packed = await packSprites(images, {
+          chromaKey: { r: 0, g: 0, b: 0 },
+          chromaTolerance: 90,
+        });
       } else {
         const background = defaultBackgroundForModel(model);
         images = await generateCharacterSprites(character, prompt.trim(), key!, {
@@ -227,10 +247,10 @@ export function App() {
         packed.hurtboxes,
       );
       swapAtlasUrl(URL.createObjectURL(packed.atlasBlob));
-      setAtlasBlob(packed.atlasBlob);
       setCharacter(sprited);
       setJson(JSON.stringify(sprited, null, 2));
-      setStatus(canCloud ? 'Sprites generated. Save to keep them.' : 'Sprites generated.');
+      setStatus('Sprites generated.');
+      void autoSave(sprited, packed.atlasBlob); // update the same record with the atlas
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -239,31 +259,35 @@ export function App() {
     }
   };
 
-  const saveCurrent = async (): Promise<void> => {
-    if (!character || !canCloud || !API_BASE) return;
-    const token = await getAccessToken();
-    if (!token) {
-      void login();
-      return;
-    }
-    setError(null);
+  // Persist the current character to the cloud automatically. Keyed by meta.id
+  // (unique per generation, see withUniqueId), so the post-generation save and
+  // the post-sprite save update the SAME record instead of creating duplicates.
+  // Non-fatal: a failure shows an indicator but never blocks generation.
+  const autoSave = async (char: Character, atlas?: Blob | null): Promise<void> => {
+    if (!canCloud || !API_BASE) return;
+    setSaveState('saving');
     try {
+      const token = await getAccessToken();
+      if (!token) {
+        setSaveState('error');
+        return;
+      }
       await saveCloudCharacter(API_BASE, token, {
-        character,
-        name: character.meta.name,
-        atlas: atlasBlob ?? undefined,
+        character: char,
+        name: char.meta.name,
+        atlas: atlas ?? undefined,
       });
-      setStatus('Saved to your collection.');
+      setSaveState('saved');
       await refreshSaved();
-    } catch (e) {
-      setError((e as Error).message);
+    } catch {
+      setSaveState('error');
     }
   };
 
   const loadSaved = (c: CloudCharacter): void => {
     setCharacter(c.character);
     setJson(JSON.stringify(c.character, null, 2));
-    setAtlasBlob(null);
+    setSaveState('idle'); // a loaded character is already persisted
     swapAtlasUrl(c.atlasUrl); // presigned URL; loadAtlasTextures fetches it
     setStatus(`Loaded "${c.name}".`);
   };
@@ -418,14 +442,20 @@ export function App() {
                       ? 'Sprites are generated on the BrawlBox API (fal retexture). Takes about a minute.'
                       : 'Sprite generation makes one image API call per animation frame (billed to your key). Takes a minute or two.'}
                   </p>
-                  {canCloud && (
-                    <Button
-                      variant="outline"
-                      onClick={() => void saveCurrent()}
-                      disabled={busy || imgBusy}
+                  {canCloud && saveState !== 'idle' && (
+                    <p
+                      className={
+                        saveState === 'error'
+                          ? 'text-xs text-destructive'
+                          : 'text-xs text-muted-foreground'
+                      }
                     >
-                      Save to my collection
-                    </Button>
+                      {saveState === 'saving'
+                        ? 'Saving to your collection…'
+                        : saveState === 'saved'
+                          ? 'Saved to your collection — it will be here when you sign back in.'
+                          : "Couldn't save to your collection (it's still here for now — try regenerating)."}
+                    </p>
                   )}
                 </>
               )}
@@ -451,16 +481,24 @@ export function App() {
             </Card>
           )}
 
-          {canCloud && saved.length > 0 && (
+          {canCloud && user && (
             <Card>
               <CardHeader>
                 <CardTitle>My characters</CardTitle>
               </CardHeader>
               <CardContent className="flex flex-col gap-1">
+                {savedError && <p className="text-sm text-destructive">{savedError}</p>}
+                {!savedError && saved.length === 0 && (
+                  <p className="text-sm text-muted-foreground">
+                    Characters you generate are saved here automatically and stay across sign-ins.
+                  </p>
+                )}
                 {saved.map((c) => (
                   <div key={c.characterId} className="flex items-center justify-between gap-2">
                     <button
-                      className="truncate text-left text-sm hover:underline"
+                      className={`truncate text-left text-sm hover:underline ${
+                        character?.meta.id === c.characterId ? 'font-semibold text-primary' : ''
+                      }`}
                       onClick={() => loadSaved(c)}
                     >
                       {c.name}
@@ -470,7 +508,11 @@ export function App() {
                       <Button variant="ghost" size="sm" onClick={() => void toggleShare(c)}>
                         {c.shared ? 'Unshare' : 'Share'}
                       </Button>
-                      <Button variant="ghost" size="sm" onClick={() => void removeSaved(c.characterId)}>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => void removeSaved(c.characterId)}
+                      >
                         Delete
                       </Button>
                     </div>
