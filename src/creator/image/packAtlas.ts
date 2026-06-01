@@ -71,7 +71,12 @@ export async function packSprites(
   for (const key of keys) {
     const rect = layout.frames[key]!;
     const bitmap = await createImageBitmap(images[key]!);
-    ctx.drawImage(bitmap, rect.x, rect.y, cellW, cellH);
+    // Fit the frame into the cell preserving aspect, anchored to the cell's
+    // bottom-center so the character's feet line up with the (0.5, 1) anchor.
+    const s = Math.min(cellW / bitmap.width, cellH / bitmap.height);
+    const dw = bitmap.width * s;
+    const dh = bitmap.height * s;
+    ctx.drawImage(bitmap, rect.x + (cellW - dw) / 2, rect.y + (cellH - dh), dw, dh);
     bitmap.close();
 
     const cell = ctx.getImageData(rect.x, rect.y, cellW, cellH);

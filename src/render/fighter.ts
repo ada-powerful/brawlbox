@@ -58,6 +58,10 @@ export class FighterRenderer {
   // Procedural fallback path.
   private readonly gfx?: Graphics;
 
+  // Uniform scale applied to sprite frames so a packed cell renders at the
+  // character's world height (cells are larger than world units). 1 = no scale.
+  private readonly spriteScale: number = 1;
+
   private lastAnim = '';
   private lastFrame = -1;
 
@@ -69,6 +73,8 @@ export class FighterRenderer {
       this.sprite = new Sprite();
       this.sprite.anchor.set(0.5, 1); // feet-center, matches world feet anchor
       // AI atlases are full-color art, so render them as-is (no player tint).
+      const cellH = Object.values(opts.textures)[0]?.frame.height ?? opts.character.size.height;
+      this.spriteScale = opts.character.size.height / cellH;
       this.view = this.sprite;
     } else {
       this.gfx = new Graphics();
@@ -103,6 +109,8 @@ export class FighterRenderer {
     const y = lerp(prev.pos.y, curr.pos.y, alpha);
     this.view.x = x;
     this.view.y = GROUND_Y_SCREEN - y;
-    this.view.scale.x = curr.facing;
+    // Procedural shapes are authored at world size (scale 1); sprite cells are
+    // scaled to the character's height. Facing flips along x.
+    this.view.scale.set(curr.facing * this.spriteScale, this.spriteScale);
   }
 }
