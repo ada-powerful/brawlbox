@@ -7,6 +7,7 @@ import { Switch } from '@/components/ui/switch.tsx';
 import { Textarea } from '@/components/ui/textarea.tsx';
 import { generateCharacter } from '@/ai/llm.ts';
 import { createOpenAIProvider } from '@/ai/openai.ts';
+import { generateCharacterViaBackend } from '@/ai/backend.ts';
 import { CHROMA, defaultBackgroundForModel, generateCharacterSprites } from '@/ai/image.ts';
 import { clearKey, getEnvKey, getKey, setKey } from '@/ai/keystore.ts';
 import { applySpritesToCharacter } from '@/creator/image/pack.ts';
@@ -19,6 +20,10 @@ const EXAMPLE = 'a stone golem brawler with a slow, heavy uppercut and lots of h
 
 // A key from .env (if any) takes over — the manual key card is then hidden.
 const ENV_KEY = getEnvKey();
+// When set, character generation goes through the BrawlBox backend (key lives
+// server-side) instead of BYOK. Sprite generation is still BYOK for now.
+const API_BASE = (import.meta.env?.VITE_API_BASE_URL as string | undefined)?.replace(/\/+$/, '');
+const BACKEND_MODE = !!API_BASE;
 // Image model; the project validated gpt-image-2. Override with VITE_IMAGE_MODEL.
 const IMAGE_MODEL = (import.meta.env?.VITE_IMAGE_MODEL as string | undefined) || 'gpt-image-2';
 
@@ -83,16 +88,22 @@ export function App() {
   const generate = async (): Promise<void> => {
     setError(null);
     setStatus(null);
-    const key = resolveKey();
-    if (!key) return;
     if (!prompt.trim()) {
       setError('Describe the character you want.');
       return;
     }
+    // BYOK path needs a key up front; backend path holds the key server-side.
+    let key: string | null = null;
+    if (!BACKEND_MODE) {
+      key = resolveKey();
+      if (!key) return;
+    }
     setBusy(true);
     try {
-      const provider = createOpenAIProvider(key);
-      const result = await generateCharacter({ prompt: prompt.trim() }, provider);
+      const result =
+        BACKEND_MODE && API_BASE
+          ? await generateCharacterViaBackend(API_BASE, { prompt: prompt.trim() })
+          : await generateCharacter({ prompt: prompt.trim() }, createOpenAIProvider(key!));
       swapAtlasUrl(undefined); // new config => drop old sprites
       setCharacter(result.character);
       setJson(JSON.stringify(result.character, null, 2));
@@ -178,7 +189,11 @@ export function App() {
           BrawlBox <span className="text-muted-foreground">character creator</span>
         </h1>
         <span className="text-xs text-muted-foreground">
-          {ENV_KEY ? 'key loaded from .env' : 'M2.2 — AI sprite generation'}
+          {ENV_KEY
+            ? 'key loaded from .env'
+            : BACKEND_MODE
+              ? 'character gen via BrawlBox API'
+              : 'M2.2 — AI sprite generation'}
         </span>
       </header>
 
@@ -212,7 +227,9 @@ export function App() {
                   />
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Sent only to api.openai.com, never to any BrawlBox server.
+                  {BACKEND_MODE
+                    ? 'Only needed for sprite generation. Character generation uses the BrawlBox API — no key required.'
+                    : 'Sent only to api.openai.com, never to any BrawlBox server.'}
                 </p>
               </CardContent>
             </Card>

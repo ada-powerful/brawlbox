@@ -19,6 +19,10 @@ jobs:
       - run: bun run typecheck
       - run: bun run test
       - run: bun run build
+        env:
+          # Character generation goes through the backend (key server-side).
+          # Function URL has no 30s cap, unlike the API Gateway endpoint.
+          VITE_API_BASE_URL: https://qke5v7s6olia2j6q4tqm5xig4q0kzswz.lambda-url.us-west-2.on.aws
       - name: Deploy to Cloudflare Pages
         uses: cloudflare/wrangler-action@v3
         with:
