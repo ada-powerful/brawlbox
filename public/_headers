@@ -1,0 +1,19 @@
+# Cloudflare Pages response headers.
+#
+# HTML entrypoints: always revalidate. After a deploy, hashed chunk names change,
+# so a stale cached index.html would reference assets that no longer exist and the
+# browser would fail the module import with "Expected a JavaScript module but got
+# text/html". no-cache forces the browser to re-fetch the current HTML — and thus
+# the current chunk references — on every load.
+/
+  Cache-Control: public, max-age=0, must-revalidate
+/index.html
+  Cache-Control: public, max-age=0, must-revalidate
+/privacy.html
+  Cache-Control: public, max-age=0, must-revalidate
+/data-deletion.html
+  Cache-Control: public, max-age=0, must-revalidate
+
+# Hashed build assets (/assets/*) keep Cloudflare's default cache. They are NOT
+# marked `immutable` on purpose: misses there are redirected to a 404 (see
+# _redirects), and an immutable cache could pin a transient deploy-race 404.

@@ -1,0 +1,13 @@
+# Cloudflare Pages routing.
+#
+# Critical: a request for a missing build asset must NOT fall back to index.html.
+# The SPA-style fallback serves index.html as a 200 text/html with a 4h
+# Cache-Control, so a single miss during a deploy-propagation window gets cached
+# at the edge — every later request for that hashed chunk then returns HTML, and
+# the browser fails the module import with "Expected a JavaScript module but got
+# text/html". Returning a real 404 instead keeps the response uncacheable-as-asset
+# and lets the next request fetch the real chunk once it has propagated.
+#
+# This app has no client-side router, so there is no legitimate SPA fallback to
+# preserve — only the real .html pages plus hashed /assets/*.
+/assets/* /404.html 404
