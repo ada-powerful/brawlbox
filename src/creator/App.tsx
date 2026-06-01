@@ -8,7 +8,7 @@ import { Textarea } from '@/components/ui/textarea.tsx';
 import { generateCharacter } from '@/ai/llm.ts';
 import { createOpenAIProvider } from '@/ai/openai.ts';
 import { generateCharacterViaBackend } from '@/ai/backend.ts';
-import { generateSpritesViaBackend } from '@/ai/spritesBackend.ts';
+import { fetchSheetAndDetect, cropSelection, type DetectedSheet } from '@/ai/spritesBackend.ts';
 import {
   isAuthEnabled,
   handleRedirectCallback,
@@ -24,6 +24,7 @@ import { applySpritesToCharacter } from '@/creator/image/pack.ts';
 import { packSprites } from '@/creator/image/packAtlas.ts';
 import type { Character } from '@/engine/schema.ts';
 import { Playtest } from '@/creator/Playtest.tsx';
+import { FrameReview } from '@/creator/FrameReview.tsx';
 import {
   listCloudCharacters,
   saveCloudCharacter,
@@ -72,6 +73,11 @@ export function App() {
   const [savedError, setSavedError] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [gallery, setGallery] = useState<CloudCharacter[]>([]);
+  // M2.3 frame-review: the retextured sheet (backend path) + the editable
+  // spriteKey→frame mapping. `repacking` guards the console during a re-pack.
+  const [sheet, setSheet] = useState<DetectedSheet | null>(null);
+  const [selection, setSelection] = useState<Record<string, number>>({});
+  const [repacking, setRepacking] = useState(false);
 
   // Cloud storage is available when signed in to the backend.
   const canCloud = BACKEND_MODE && AUTH_ENABLED && !!API_BASE;
@@ -164,6 +170,53 @@ export function App() {
     });
   };
 
+  // Release the previous sheet's object URL + decoded bitmap when it is replaced
+  // (new generation) or on unmount. Editing the selection keeps the same `sheet`
+  // identity, so this never fires mid-remap.
+  useEffect(() => {
+    return () => {
+      if (sheet) {
+        URL.revokeObjectURL(sheet.sheetUrl);
+        sheet.bitmap.close();
+      }
+    };
+  }, [sheet]);
+
+  // Crop the chosen frame per pose, pack the atlas, apply it to `char`, show it
+  // in the playtest, and auto-save. Shared by the initial sprite-gen and every
+  // frame re-map. The template sheet sits on black, so we key that out.
+  const applyBackendSelection = async (
+    s: DetectedSheet,
+    sel: Record<string, number>,
+    char: Character,
+  ): Promise<void> => {
+    const images = await cropSelection(s.bitmap, s.frames, sel);
+    const packed = await packSprites(images, {
+      chromaKey: { r: 0, g: 0, b: 0 },
+      chromaTolerance: 90,
+    });
+    const sprited = applySpritesToCharacter(
+      char,
+      `${char.meta.id}/atlas.png`,
+      packed.frames,
+      packed.hurtboxes,
+    );
+    swapAtlasUrl(URL.createObjectURL(packed.atlasBlob));
+    setCharacter(sprited);
+    setJson(JSON.stringify(sprited, null, 2));
+    void autoSave(sprited, packed.atlasBlob);
+  };
+
+  // Re-map a single pose to a different detected frame, then re-pack live.
+  const remapFrame = (next: Record<string, number>): void => {
+    if (!sheet || !character) return;
+    setSelection(next);
+    setRepacking(true);
+    applyBackendSelection(sheet, next, character)
+      .catch((e) => setError((e as Error).message))
+      .finally(() => setRepacking(false));
+  };
+
   const generate = async (): Promise<void> => {
     setError(null);
     setStatus(null);
@@ -191,6 +244,7 @@ export function App() {
       // LLM happened to give the same meta.id.
       const newChar = withUniqueId(result.character);
       swapAtlasUrl(undefined); // new config => drop old sprites
+      setSheet(null); // and the old review sheet
       setCharacter(newChar);
       setJson(JSON.stringify(newChar, null, 2));
       setStatus(
@@ -221,36 +275,38 @@ export function App() {
     setImgBusy(true);
     setImgProgress({ done: 0, total: 0 });
     try {
-      let images: Record<string, Blob>;
-      let packed;
       if (BACKEND_MODE && API_BASE) {
-        // fal-retextured template sheet, sliced to per-key frames on black bg.
-        images = await generateSpritesViaBackend(API_BASE, prompt.trim(), character, token);
-        packed = await packSprites(images, {
-          chromaKey: { r: 0, g: 0, b: 0 },
-          chromaTolerance: 90,
-        });
+        // fal-retextured template sheet. Detect frames + apply the default
+        // mapping, then keep the sheet so the review console can re-map poses.
+        const detected = await fetchSheetAndDetect(API_BASE, prompt.trim(), character, token);
+        setSheet(detected); // replaces+disposes any prior sheet (see effect above)
+        setSelection(detected.selection);
+        await applyBackendSelection(detected, detected.selection, character);
+        setStatus('Sprites generated. Review the frame mapping below and fix any mis-mapped pose.');
       } else {
         const background = defaultBackgroundForModel(model);
-        images = await generateCharacterSprites(character, prompt.trim(), key!, {
+        const images = await generateCharacterSprites(character, prompt.trim(), key!, {
           model,
           background,
           onProgress: (done, total) => setImgProgress({ done, total }),
         });
         // gpt-image-2 can't emit transparency — key out the magenta backdrop here.
-        packed = await packSprites(images, background === 'chroma' ? { chromaKey: CHROMA } : {});
+        const packed = await packSprites(
+          images,
+          background === 'chroma' ? { chromaKey: CHROMA } : {},
+        );
+        const sprited = applySpritesToCharacter(
+          character,
+          `${character.meta.id}/atlas.png`,
+          packed.frames,
+          packed.hurtboxes,
+        );
+        swapAtlasUrl(URL.createObjectURL(packed.atlasBlob));
+        setCharacter(sprited);
+        setJson(JSON.stringify(sprited, null, 2));
+        setStatus('Sprites generated.');
+        void autoSave(sprited, packed.atlasBlob); // update the same record with the atlas
       }
-      const sprited = applySpritesToCharacter(
-        character,
-        `${character.meta.id}/atlas.png`,
-        packed.frames,
-        packed.hurtboxes,
-      );
-      swapAtlasUrl(URL.createObjectURL(packed.atlasBlob));
-      setCharacter(sprited);
-      setJson(JSON.stringify(sprited, null, 2));
-      setStatus('Sprites generated.');
-      void autoSave(sprited, packed.atlasBlob); // update the same record with the atlas
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -288,6 +344,7 @@ export function App() {
     setCharacter(c.character);
     setJson(JSON.stringify(c.character, null, 2));
     setSaveState('idle'); // a loaded character is already persisted
+    setSheet(null); // a saved character has no source sheet to review
     swapAtlasUrl(c.atlasUrl); // presigned URL; loadAtlasTextures fetches it
     setStatus(`Loaded "${c.name}".`);
   };
@@ -561,6 +618,28 @@ export function App() {
           </CardContent>
         </Card>
       </div>
+
+      {sheet && (
+        <Card>
+          <CardHeader className="flex-row items-center justify-between space-y-0">
+            <CardTitle>Review frames</CardTitle>
+            <span className="text-xs text-muted-foreground">
+              {repacking ? 'Re-packing…' : 'Click a pose, then a frame to fix a mis-mapped sprite'}
+            </span>
+          </CardHeader>
+          <CardContent>
+            <FrameReview
+              sheetUrl={sheet.sheetUrl}
+              width={sheet.width}
+              height={sheet.height}
+              frames={sheet.frames}
+              selection={selection}
+              onChange={remapFrame}
+              busy={repacking}
+            />
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
