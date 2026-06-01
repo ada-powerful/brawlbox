@@ -68,14 +68,31 @@ export async function packSprites(
 
   const hurtboxes: Record<string, AABB> = {};
 
+  // Decode every frame up front so we can derive ONE scale factor shared across
+  // all of them. Frames arrive tightly cropped to their own content, so scaling
+  // each independently to fill the cell would normalize away the relative size
+  // the poses shared in the source sheet — a wide running crop would shrink
+  // (width-limited) while a tall standing crop fills the cell, making the
+  // character balloon and shrink frame to frame. A single scale keeps the
+  // tallest/widest frame filling the cell and every other pose proportional.
+  const bitmaps: Record<string, ImageBitmap> = {};
+  let maxW = 1;
+  let maxH = 1;
+  for (const key of keys) {
+    const bitmap = await createImageBitmap(images[key]!);
+    bitmaps[key] = bitmap;
+    if (bitmap.width > maxW) maxW = bitmap.width;
+    if (bitmap.height > maxH) maxH = bitmap.height;
+  }
+  const scale = Math.min(cellW / maxW, cellH / maxH);
+
   for (const key of keys) {
     const rect = layout.frames[key]!;
-    const bitmap = await createImageBitmap(images[key]!);
-    // Fit the frame into the cell preserving aspect, anchored to the cell's
-    // bottom-center so the character's feet line up with the (0.5, 1) anchor.
-    const s = Math.min(cellW / bitmap.width, cellH / bitmap.height);
-    const dw = bitmap.width * s;
-    const dh = bitmap.height * s;
+    const bitmap = bitmaps[key]!;
+    // Draw at the shared scale, anchored to the cell's bottom-center so the
+    // character's feet line up with the (0.5, 1) sprite anchor.
+    const dw = bitmap.width * scale;
+    const dh = bitmap.height * scale;
     ctx.drawImage(bitmap, rect.x + (cellW - dw) / 2, rect.y + (cellH - dh), dw, dh);
     bitmap.close();
 

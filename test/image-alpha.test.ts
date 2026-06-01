@@ -1,9 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import {
-  alphaBoundingBox,
-  keyOutChroma,
-  pixelBoxToLocalAABB,
-} from '../src/creator/image/alpha.ts';
+import { alphaBoundingBox, keyOutChroma, pixelBoxToLocalAABB } from '../src/creator/image/alpha.ts';
 
 /** Build an RGBA buffer of `w`x`h`, opaque white inside `box`, transparent elsewhere. */
 function buffer(w: number, h: number, box: { x: number; y: number; w: number; h: number }) {
