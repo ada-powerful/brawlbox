@@ -133,6 +133,9 @@ const HitDefSchema = z.object({
   groundHitTime: z.number().int().nonnegative(),
   groundVelocity: Vec2Schema,
   airVelocity: Vec2Schema,
+  // Pushback applied to a victim who BLOCKS this hit (x is facing-relative, like
+  // groundVelocity). Optional; defaults to a scaled groundVelocity at runtime.
+  guardVelocity: Vec2Schema.optional(),
   priority: z.number().int(),
   fall: z.boolean().optional(),
   sound: z.string().optional(),

@@ -2,6 +2,7 @@ import type { HitEvent } from './collision.ts';
 import type { Character, HitDef } from './schema.ts';
 import { applyStateHeader } from './stateMachine.ts';
 import type { Player, World } from './world.ts';
+import { Btn } from './world.ts';
 
 export function applyHits(
   events: HitEvent[],
@@ -19,27 +20,84 @@ export function applyHits(
   }
 }
 
+type Defense = 'hit' | 'guard.stand' | 'guard.crouch' | 'guard.air';
+
+/**
+ * Decide whether the victim blocks the incoming hit. Blocking requires:
+ *  - the victim is in a neutral (moveType 'I') state (not attacking / in hitstun),
+ *  - holding away from the attacker (back),
+ *  - the guard position the HitDef's guardFlag permits (H high, L low, M mid, A air),
+ *  - and the corresponding guard state is authored on the victim.
+ * Blocking in the wrong position (e.g. crouch-guarding a high attack) lands as a hit.
+ */
+function resolveDefense(
+  attacker: Player,
+  victim: Player,
+  hitDef: HitDef,
+  victimCharacter: Character,
+): Defense {
+  const vState = victimCharacter.states[victim.stateId];
+  if (!vState || vState.moveType !== 'I') return 'hit';
+
+  const input = victim.inputBuffer[victim.inputBuffer.length - 1] ?? 0;
+  const awayBit = victim.pos.x >= attacker.pos.x ? Btn.Right : Btn.Left;
+  if ((input & awayBit) === 0) return 'hit'; // not holding back
+
+  const gf = hitDef.guardFlag.toUpperCase();
+  const high = gf.includes('H') || gf.includes('M');
+  const low = gf.includes('L') || gf.includes('M');
+  const air = gf.includes('A');
+
+  if (victim.pos.y > 0) {
+    return air && victimCharacter.states['guard.air'] ? 'guard.air' : 'hit';
+  }
+  if ((input & Btn.Down) !== 0) {
+    return low && victimCharacter.states['guard.crouch'] ? 'guard.crouch' : 'hit';
+  }
+  return high && victimCharacter.states['guard.stand'] ? 'guard.stand' : 'hit';
+}
+
 export function applyHit(
   attacker: Player,
   victim: Player,
   hitDef: HitDef,
   victimCharacter: Character,
 ): void {
-  victim.life -= hitDef.damage.hit;
-  if (victim.life < 0) victim.life = 0;
+  const defense = resolveDefense(attacker, victim, hitDef, victimCharacter);
 
-  const isAir = victim.pos.y > 0;
-  const targetState = isAir ? 'hit.air' : 'hit.stand';
-  victim.stateId = targetState;
-  victim.stateTime = 0;
-  applyStateHeader(victim, victimCharacter, targetState);
+  if (defense === 'hit') {
+    victim.life -= hitDef.damage.hit;
+    if (victim.life < 0) victim.life = 0;
 
-  const v = isAir ? hitDef.airVelocity : hitDef.groundVelocity;
-  victim.vel.x = v.x * attacker.facing;
-  victim.vel.y = v.y;
+    const isAir = victim.pos.y > 0;
+    const targetState = isAir ? 'hit.air' : 'hit.stand';
+    victim.stateId = targetState;
+    victim.stateTime = 0;
+    applyStateHeader(victim, victimCharacter, targetState);
+
+    const v = isAir ? hitDef.airVelocity : hitDef.groundVelocity;
+    victim.vel.x = v.x * attacker.facing;
+    victim.vel.y = v.y;
+
+    victim.hitPause = hitDef.pauseTime.p2;
+    attacker.moveHit = true;
+  } else {
+    // Blocked: chip damage, blockstun pushback, into the matching guard state.
+    victim.life -= hitDef.damage.guard;
+    if (victim.life < 0) victim.life = 0;
+
+    victim.stateId = defense;
+    victim.stateTime = 0;
+    applyStateHeader(victim, victimCharacter, defense);
+
+    const gv = hitDef.guardVelocity ?? { x: Math.max(2, hitDef.groundVelocity.x * 0.5), y: 0 };
+    victim.vel.x = gv.x * attacker.facing;
+    victim.vel.y = defense === 'guard.air' ? gv.y : 0;
+
+    victim.hitPause = hitDef.pauseTime.p2;
+    attacker.moveGuarded = true;
+  }
 
   attacker.hitPause = hitDef.pauseTime.p1;
-  victim.hitPause = hitDef.pauseTime.p2;
-
   attacker.activeHitDef = null;
 }

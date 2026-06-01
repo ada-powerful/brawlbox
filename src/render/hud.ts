@@ -4,10 +4,13 @@ import { STAGE_WIDTH } from '../engine/world.ts';
 
 const TICKS_PER_SECOND = 60;
 
-const BAR_WIDTH = 300;
 const BAR_HEIGHT = 22;
 const BAR_Y = 30;
 const BAR_PAD = 30;
+/** Reserved center space for the round timer between the two bars. */
+const CENTER_GAP = 120;
+/** Each bar fills the stage width minus the side padding and center gap. */
+const BAR_WIDTH = (STAGE_WIDTH - 2 * BAR_PAD - CENTER_GAP) / 2;
 const MAX_LIFE = 1000;
 
 export class HealthBars {
