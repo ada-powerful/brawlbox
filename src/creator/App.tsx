@@ -28,6 +28,8 @@ import {
   listCloudCharacters,
   saveCloudCharacter,
   deleteCloudCharacter,
+  shareCloudCharacter,
+  listGallery,
   type CloudCharacter,
 } from '@/creator/store/cloud.ts';
 
@@ -59,6 +61,7 @@ export function App() {
   const [model, setModel] = useState(IMAGE_MODEL);
   const [user, setUser] = useState<User | null>(null);
   const [saved, setSaved] = useState<CloudCharacter[]>([]);
+  const [gallery, setGallery] = useState<CloudCharacter[]>([]);
   const [atlasBlob, setAtlasBlob] = useState<Blob | null>(null);
 
   // Cloud storage is available when signed in to the backend.
@@ -84,6 +87,21 @@ export function App() {
     void refreshSaved();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
+
+  const refreshGallery = async (): Promise<void> => {
+    if (!BACKEND_MODE || !API_BASE) return;
+    try {
+      setGallery(await listGallery(API_BASE)); // public — no token needed
+    } catch {
+      /* non-fatal */
+    }
+  };
+
+  // Load the public gallery once on mount.
+  useEffect(() => {
+    void refreshGallery();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Backend generation needs a signed-in user when auth is on. Returns the
   // access token, or triggers login (redirect) and returns undefined to abort.
@@ -257,6 +275,20 @@ export function App() {
     try {
       await deleteCloudCharacter(API_BASE, token, id);
       await refreshSaved();
+      await refreshGallery();
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+
+  const toggleShare = async (c: CloudCharacter): Promise<void> => {
+    if (!canCloud || !API_BASE) return;
+    const token = await getAccessToken();
+    if (!token) return;
+    try {
+      await shareCloudCharacter(API_BASE, token, c.characterId, !c.shared);
+      await refreshSaved();
+      await refreshGallery();
     } catch (e) {
       setError((e as Error).message);
     }
@@ -432,15 +464,36 @@ export function App() {
                       onClick={() => loadSaved(c)}
                     >
                       {c.name}
+                      {c.shared && <span className="ml-1 text-xs text-primary">· shared</span>}
                     </button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => void removeSaved(c.characterId)}
-                    >
-                      Delete
-                    </Button>
+                    <div className="flex shrink-0 items-center gap-1">
+                      <Button variant="ghost" size="sm" onClick={() => void toggleShare(c)}>
+                        {c.shared ? 'Unshare' : 'Share'}
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={() => void removeSaved(c.characterId)}>
+                        Delete
+                      </Button>
+                    </div>
                   </div>
+                ))}
+              </CardContent>
+            </Card>
+          )}
+
+          {gallery.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Gallery</CardTitle>
+              </CardHeader>
+              <CardContent className="flex flex-col gap-1">
+                {gallery.map((c) => (
+                  <button
+                    key={c.characterId}
+                    className="truncate text-left text-sm hover:underline"
+                    onClick={() => loadSaved(c)}
+                  >
+                    {c.name}
+                  </button>
                 ))}
               </CardContent>
             </Card>

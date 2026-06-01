@@ -10,6 +10,8 @@ export interface CloudCharacter {
   createdAt: number;
   /** Presigned GET URL for the atlas PNG (CORS-clean, ~1h). */
   atlasUrl?: string;
+  /** Whether this character is published to the public gallery. */
+  shared?: boolean;
 }
 
 async function blobToBase64(blob: Blob): Promise<string> {
@@ -59,4 +61,26 @@ export async function deleteCloudCharacter(
     headers: authHeaders(token),
   });
   if (!res.ok) throw new Error(`Delete failed (${res.status})`);
+}
+
+/** Publish/unpublish one of the caller's characters to the public gallery. */
+export async function shareCloudCharacter(
+  baseUrl: string,
+  token: string,
+  characterId: string,
+  shared: boolean,
+): Promise<void> {
+  const res = await fetch(`${baseUrl}/characters/${encodeURIComponent(characterId)}/share`, {
+    method: 'POST',
+    headers: authHeaders(token),
+    body: JSON.stringify({ shared }),
+  });
+  if (!res.ok) throw new Error(`Share failed (${res.status})`);
+}
+
+/** Public gallery — newest shared characters across all users (no auth). */
+export async function listGallery(baseUrl: string): Promise<CloudCharacter[]> {
+  const res = await fetch(`${baseUrl}/gallery`);
+  if (!res.ok) throw new Error(`Loading gallery failed (${res.status})`);
+  return ((await res.json()) as { characters: CloudCharacter[] }).characters;
 }
