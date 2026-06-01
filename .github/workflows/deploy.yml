@@ -23,6 +23,10 @@ jobs:
           # Character generation goes through the backend (key server-side).
           # Function URL has no 30s cap, unlike the API Gateway endpoint.
           VITE_API_BASE_URL: https://qke5v7s6olia2j6q4tqm5xig4q0kzswz.lambda-url.us-west-2.on.aws
+          # Cognito auth (hosted UI handles native + Google/Facebook).
+          VITE_COGNITO_AUTHORITY: https://cognito-idp.us-west-2.amazonaws.com/us-west-2_rTabVInEv
+          VITE_COGNITO_CLIENT_ID: 5hd7kiqc9oojahb34g0g4lr0r3
+          VITE_COGNITO_DOMAIN: brawlbox.auth.us-west-2.amazoncognito.com
       - name: Deploy to Cloudflare Pages
         uses: cloudflare/wrangler-action@v3
         with:

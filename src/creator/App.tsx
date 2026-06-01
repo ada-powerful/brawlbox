@@ -9,6 +9,15 @@ import { generateCharacter } from '@/ai/llm.ts';
 import { createOpenAIProvider } from '@/ai/openai.ts';
 import { generateCharacterViaBackend } from '@/ai/backend.ts';
 import { generateSpritesViaBackend } from '@/ai/spritesBackend.ts';
+import {
+  isAuthEnabled,
+  handleRedirectCallback,
+  getAccessToken,
+  login,
+  logout,
+  userEmail,
+} from '@/auth/auth.ts';
+import type { User } from 'oidc-client-ts';
 import { CHROMA, defaultBackgroundForModel, generateCharacterSprites } from '@/ai/image.ts';
 import { clearKey, getEnvKey, getKey, setKey } from '@/ai/keystore.ts';
 import { applySpritesToCharacter } from '@/creator/image/pack.ts';
@@ -25,6 +34,8 @@ const ENV_KEY = getEnvKey();
 // server-side) instead of BYOK. Sprite generation is still BYOK for now.
 const API_BASE = (import.meta.env?.VITE_API_BASE_URL as string | undefined)?.replace(/\/+$/, '');
 const BACKEND_MODE = !!API_BASE;
+// When auth is configured, backend generation requires a signed-in user.
+const AUTH_ENABLED = isAuthEnabled();
 // Image model; the project validated gpt-image-2. Override with VITE_IMAGE_MODEL.
 const IMAGE_MODEL = (import.meta.env?.VITE_IMAGE_MODEL as string | undefined) || 'gpt-image-2';
 
@@ -42,6 +53,25 @@ export function App() {
   const [json, setJson] = useState('');
   const [model, setModel] = useState(IMAGE_MODEL);
   const [saved, setSaved] = useState<StoredCharacter[]>([]);
+  const [user, setUser] = useState<User | null>(null);
+
+  // Complete any hosted-UI redirect (?code=) and load the current session.
+  useEffect(() => {
+    if (AUTH_ENABLED) void handleRedirectCallback().then(setUser);
+  }, []);
+
+  // Backend generation needs a signed-in user when auth is on. Returns the
+  // access token, or triggers login (redirect) and returns undefined to abort.
+  const ensureToken = async (): Promise<string | null | undefined> => {
+    if (!BACKEND_MODE || !AUTH_ENABLED) return null;
+    const token = await getAccessToken();
+    if (!token) {
+      setError('Please sign in to generate.');
+      void login();
+      return undefined;
+    }
+    return token;
+  };
 
   // Hydrate any persisted key on first load (skipped when .env provides one).
   useEffect(() => {
@@ -95,15 +125,19 @@ export function App() {
     }
     // BYOK path needs a key up front; backend path holds the key server-side.
     let key: string | null = null;
+    let token: string | null | undefined = null;
     if (!BACKEND_MODE) {
       key = resolveKey();
       if (!key) return;
+    } else {
+      token = await ensureToken();
+      if (token === undefined) return; // redirecting to sign in
     }
     setBusy(true);
     try {
       const result =
         BACKEND_MODE && API_BASE
-          ? await generateCharacterViaBackend(API_BASE, { prompt: prompt.trim() })
+          ? await generateCharacterViaBackend(API_BASE, { prompt: prompt.trim() }, token)
           : await generateCharacter({ prompt: prompt.trim() }, createOpenAIProvider(key!));
       swapAtlasUrl(undefined); // new config => drop old sprites
       setCharacter(result.character);
@@ -124,9 +158,13 @@ export function App() {
     setStatus(null);
     // BYOK path needs a key; backend path retextures the template server-side.
     let key: string | null = null;
+    let token: string | null | undefined = null;
     if (!BACKEND_MODE) {
       key = resolveKey();
       if (!key) return;
+    } else {
+      token = await ensureToken();
+      if (token === undefined) return; // redirecting to sign in
     }
     setImgBusy(true);
     setImgProgress({ done: 0, total: 0 });
@@ -135,7 +173,7 @@ export function App() {
       let packed;
       if (BACKEND_MODE && API_BASE) {
         // fal-retextured template sheet, sliced to per-key frames on black bg.
-        images = await generateSpritesViaBackend(API_BASE, prompt.trim(), character);
+        images = await generateSpritesViaBackend(API_BASE, prompt.trim(), character, token);
         packed = await packSprites(images, { chromaKey: { r: 0, g: 0, b: 0 }, chromaTolerance: 90 });
       } else {
         const background = defaultBackgroundForModel(model);
@@ -198,13 +236,28 @@ export function App() {
         <h1 className="text-xl font-semibold tracking-tight">
           BrawlBox <span className="text-muted-foreground">character creator</span>
         </h1>
-        <span className="text-xs text-muted-foreground">
-          {ENV_KEY
-            ? 'key loaded from .env'
-            : BACKEND_MODE
-              ? 'generation via BrawlBox API'
-              : 'M2.2 — AI sprite generation'}
-        </span>
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-muted-foreground">
+            {ENV_KEY
+              ? 'key loaded from .env'
+              : BACKEND_MODE
+                ? 'generation via BrawlBox API'
+                : 'M2.2 — AI sprite generation'}
+          </span>
+          {AUTH_ENABLED &&
+            (user ? (
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">{userEmail(user)}</span>
+                <Button variant="secondary" size="sm" onClick={() => void logout()}>
+                  Sign out
+                </Button>
+              </div>
+            ) : (
+              <Button size="sm" onClick={() => void login()}>
+                Sign in
+              </Button>
+            ))}
+        </div>
       </header>
 
       <div className="grid flex-1 grid-cols-1 gap-4 lg:grid-cols-[420px_1fr]">

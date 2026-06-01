@@ -13,10 +13,13 @@ export interface BackendGenerateResult {
 export async function generateCharacterViaBackend(
   baseUrl: string,
   spec: GenSpec,
+  token?: string | null,
 ): Promise<BackendGenerateResult> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (token) headers.Authorization = `Bearer ${token}`;
   const res = await fetch(`${baseUrl}/generate/character`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify({ prompt: spec.prompt, name: spec.name }),
   });
 

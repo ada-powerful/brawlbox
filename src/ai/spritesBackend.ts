@@ -59,10 +59,13 @@ export async function generateSpritesViaBackend(
   baseUrl: string,
   description: string,
   character: Character,
+  token?: string | null,
 ): Promise<Record<string, Blob>> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (token) headers.Authorization = `Bearer ${token}`;
   const res = await fetch(`${baseUrl}/generate/sprites`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify({ description }),
   });
   if (!res.ok) {
