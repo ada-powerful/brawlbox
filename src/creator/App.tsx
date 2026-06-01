@@ -22,7 +22,6 @@ import { CHROMA, defaultBackgroundForModel, generateCharacterSprites } from '@/a
 import { clearKey, getEnvKey, getKey, setKey } from '@/ai/keystore.ts';
 import { applySpritesToCharacter } from '@/creator/image/pack.ts';
 import { packSprites } from '@/creator/image/packAtlas.ts';
-import { listCharacters, saveCharacter, type StoredCharacter } from '@/creator/store/db.ts';
 import type { Character } from '@/engine/schema.ts';
 import { Playtest } from '@/creator/Playtest.tsx';
 
@@ -52,7 +51,6 @@ export function App() {
   const [atlasUrl, setAtlasUrl] = useState<string | undefined>(undefined);
   const [json, setJson] = useState('');
   const [model, setModel] = useState(IMAGE_MODEL);
-  const [saved, setSaved] = useState<StoredCharacter[]>([]);
   const [user, setUser] = useState<User | null>(null);
 
   // Complete any hosted-UI redirect (?code=) and load the current session.
@@ -82,16 +80,7 @@ export function App() {
         setRemember(true);
       }
     }
-    void refreshSaved();
   }, []);
-
-  const refreshSaved = async (): Promise<void> => {
-    try {
-      setSaved(await listCharacters());
-    } catch {
-      /* IndexedDB unavailable — non-fatal */
-    }
-  };
 
   const resolveKey = (): string | null => {
     const key = ENV_KEY ?? apiKey.trim();
@@ -194,28 +183,13 @@ export function App() {
       swapAtlasUrl(URL.createObjectURL(packed.atlasBlob));
       setCharacter(sprited);
       setJson(JSON.stringify(sprited, null, 2));
-      await saveCharacter({
-        id: sprited.meta.id,
-        name: sprited.meta.name,
-        character: sprited,
-        atlas: packed.atlasBlob,
-        createdAt: Date.now(),
-      });
-      await refreshSaved();
-      setStatus('Sprites generated and saved locally.');
+      setStatus('Sprites generated.');
     } catch (e) {
       setError((e as Error).message);
     } finally {
       setImgBusy(false);
       setImgProgress(null);
     }
-  };
-
-  const loadSaved = (rec: StoredCharacter): void => {
-    swapAtlasUrl(URL.createObjectURL(rec.atlas));
-    setCharacter(rec.character);
-    setJson(JSON.stringify(rec.character, null, 2));
-    setStatus(`Loaded "${rec.name}" from local storage (offline).`);
   };
 
   const download = (): void => {
@@ -349,28 +323,6 @@ export function App() {
               {status && <p className="text-sm text-primary">{status}</p>}
             </CardContent>
           </Card>
-
-          {saved.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Saved locally</CardTitle>
-              </CardHeader>
-              <CardContent className="flex flex-col gap-2">
-                {saved.map((rec) => (
-                  <Button
-                    key={rec.id}
-                    variant="outline"
-                    size="sm"
-                    className="justify-start"
-                    onClick={() => loadSaved(rec)}
-                  >
-                    {rec.name}
-                  </Button>
-                ))}
-                <p className="text-xs text-muted-foreground">Reloads with no network calls.</p>
-              </CardContent>
-            </Card>
-          )}
 
           {json && (
             <Card className="flex-1">
