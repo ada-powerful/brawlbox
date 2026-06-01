@@ -23,6 +23,8 @@ function makePlayer(animId = 'test', animFrame = 0, animTime = 0): Player {
     activeHitDef: null,
     activeThrow: null,
     bind: null,
+    moveHit: false,
+    moveGuarded: false,
   };
 }
 

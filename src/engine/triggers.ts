@@ -9,9 +9,6 @@ export interface TriggerCtx {
   inputs: Inputs;
   playerIndex: number;
   character: Character;
-  moveContact?: boolean;
-  moveHit?: boolean;
-  moveGuarded?: boolean;
 }
 
 const BUTTON_BIT: Record<string, number> = {
@@ -145,11 +142,11 @@ function evalFlag(
     case 'ctrl':
       return ctx.player.ctrl;
     case 'moveContact':
-      return ctx.moveContact ?? false;
+      return ctx.player.moveHit || ctx.player.moveGuarded;
     case 'moveHit':
-      return ctx.moveHit ?? false;
+      return ctx.player.moveHit;
     case 'moveGuarded':
-      return ctx.moveGuarded ?? false;
+      return ctx.player.moveGuarded;
   }
 }
 

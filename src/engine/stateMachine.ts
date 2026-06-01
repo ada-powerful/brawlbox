@@ -50,6 +50,10 @@ export function stepStateMachine(
         player.stateTime = 0;
         player.activeHitDef = null;
         player.activeThrow = null;
+        // A new state begins a new move: clear last move's contact result so
+        // moveHit/moveGuarded/moveContact triggers reflect the current move.
+        player.moveHit = false;
+        player.moveGuarded = false;
         applyStateHeader(player, character, c.value);
         if (c.ctrl !== undefined) player.ctrl = c.ctrl === 1;
         changed = true;

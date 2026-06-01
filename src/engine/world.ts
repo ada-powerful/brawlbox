@@ -70,6 +70,10 @@ export interface Player {
   activeThrow: ThrowDef | null;
   /** Non-null while this player is held in an opponent's throw. */
   bind: BindState | null;
+  /** The current attack landed cleanly on an opponent (drives moveHit/moveContact). */
+  moveHit: boolean;
+  /** The current attack was blocked (drives moveGuarded/moveContact). */
+  moveGuarded: boolean;
 }
 
 export interface World {
@@ -107,6 +111,8 @@ export function createWorld(p1Char = 'base', p2Char = 'base'): World {
         activeHitDef: null,
         activeThrow: null,
         bind: null,
+        moveHit: false,
+        moveGuarded: false,
       },
       {
         characterId: p2Char,
@@ -127,6 +133,8 @@ export function createWorld(p1Char = 'base', p2Char = 'base'): World {
         activeHitDef: null,
         activeThrow: null,
         bind: null,
+        moveHit: false,
+        moveGuarded: false,
       },
     ],
   };

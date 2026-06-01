@@ -305,6 +305,36 @@
           "hurtboxes": [{ "x": -30, "y": 0, "w": 60, "h": 100 }]
         }
       ]
+    },
+    "guard.stand": {
+      "loop": false,
+      "frames": [
+        {
+          "sprite": "hit-stand",
+          "duration": -1,
+          "hurtboxes": [{ "x": -30, "y": 0, "w": 60, "h": 100 }]
+        }
+      ]
+    },
+    "guard.crouch": {
+      "loop": false,
+      "frames": [
+        {
+          "sprite": "crouch",
+          "duration": -1,
+          "hurtboxes": [{ "x": -28, "y": 0, "w": 56, "h": 60 }]
+        }
+      ]
+    },
+    "guard.air": {
+      "loop": false,
+      "frames": [
+        {
+          "sprite": "hit-air",
+          "duration": -1,
+          "hurtboxes": [{ "x": -30, "y": 0, "w": 60, "h": 100 }]
+        }
+      ]
     }
   },
   "states": {
@@ -899,6 +929,58 @@
       "anim": "thrown",
       "ctrl": 0,
       "controllers": []
+    },
+    "guard.stand": {
+      "type": "S",
+      "moveType": "I",
+      "physics": "S",
+      "anim": "guard.stand",
+      "ctrl": 0,
+      "controllers": [
+        {
+          "type": "ChangeState",
+          "value": "stand",
+          "ctrl": 1,
+          "trigger": { "op": "ge", "left": { "ref": "time" }, "right": { "const": 11 } }
+        }
+      ]
+    },
+    "guard.crouch": {
+      "type": "C",
+      "moveType": "I",
+      "physics": "S",
+      "anim": "guard.crouch",
+      "ctrl": 0,
+      "controllers": [
+        {
+          "type": "ChangeState",
+          "value": "stand",
+          "ctrl": 1,
+          "trigger": { "op": "ge", "left": { "ref": "time" }, "right": { "const": 11 } }
+        }
+      ]
+    },
+    "guard.air": {
+      "type": "A",
+      "moveType": "I",
+      "physics": "A",
+      "anim": "guard.air",
+      "ctrl": 0,
+      "controllers": [
+        {
+          "type": "ChangeState",
+          "value": "stand",
+          "ctrl": 1,
+          "trigger": {
+            "op": "and",
+            "args": [
+              { "op": "le", "left": { "ref": "pos.y" }, "right": { "const": 0 } },
+              { "op": "le", "left": { "ref": "vel.y" }, "right": { "const": 0 } },
+              { "op": "gt", "left": { "ref": "time" }, "right": { "const": 8 } }
+            ]
+          }
+        }
+      ]
     },
     "ko": {
       "type": "L",
