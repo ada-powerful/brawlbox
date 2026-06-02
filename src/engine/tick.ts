@@ -6,7 +6,7 @@ import type { Character } from './schema.ts';
 import { applyStateHeader, stepStateMachine } from './stateMachine.ts';
 import { applyBinds, applyThrows, detectThrows } from './throw.ts';
 import type { Inputs, Player, World } from './world.ts';
-import { isDowned, KO_DELAY, STAGE_CEILING, STAGE_LEFT_X, STAGE_RIGHT_X } from './world.ts';
+import { isDowned, KO_DELAY, STAGE_CEILING, STAGE_LEFT_X, STAGE_RIGHT_X, STUN_DECAY } from './world.ts';
 
 export function tick(world: World, characters: Record<string, Character>, inputs: Inputs): World {
   if (world.matchOver) {
@@ -25,6 +25,10 @@ export function tick(world: World, characters: Record<string, Character>, inputs
     // OTG counter only persists while the player stays knocked down.
     const st = character.states[p.stateId];
     if (!st || !isDowned(st.type, st.moveType)) p.otgHits = 0;
+
+    // Stun meter bleeds off over time, but NOT while in hitstun — so a combo's
+    // hits accumulate toward a dizzy, while spaced single pokes decay away.
+    if (p.stun > 0 && st && st.moveType !== 'H') p.stun = Math.max(0, p.stun - STUN_DECAY);
 
     if (p.hitPause > 0) {
       p.hitPause--;
@@ -87,16 +91,7 @@ export function tick(world: World, characters: Record<string, Character>, inputs
       // and the winner poses, THEN show the result.
       if (world.koCountdown <= 0) {
         world.koCountdown = KO_DELAY;
-        const winner = alive === 1 ? world.players[lastAlive] : undefined;
-        if (winner) {
-          const wc = characters[winner.characterId];
-          if (wc && wc.states['win']) {
-            winner.stateId = 'win';
-            winner.stateTime = 0;
-            winner.ctrl = false;
-            applyStateHeader(winner, wc, 'win');
-          }
-        }
+        if (alive === 1) enterEndState(world.players[lastAlive], characters, 'win');
       }
       world.koCountdown--;
       if (world.koCountdown <= 0) {
@@ -113,6 +108,13 @@ export function tick(world: World, characters: Record<string, Character>, inputs
         const p1 = world.players[1];
         if (p0 && p1) {
           world.winner = p0.life > p1.life ? 0 : p1.life > p0.life ? 1 : null;
+          // Time-up poses: the winner celebrates, the loser slumps dizzy — a loss
+          // by judgement, distinct from a KO (where the loser lies knocked out).
+          if (world.winner !== null) {
+            const loserIdx = world.winner === 0 ? 1 : 0;
+            enterEndState(world.players[world.winner], characters, 'win');
+            enterEndState(world.players[loserIdx], characters, 'lose');
+          }
         }
       }
     }
@@ -138,6 +140,24 @@ function updateFacing(world: World): void {
   if (!a || !b) return;
   faceOpponent(a, b);
   faceOpponent(b, a);
+}
+
+/** Force a player into an end-of-match pose (win / lose) if the character defines it. */
+function enterEndState(
+  p: Player | undefined,
+  characters: Record<string, Character>,
+  stateId: string,
+): void {
+  if (!p) return;
+  const ch = characters[p.characterId];
+  if (!ch || !ch.states[stateId]) return;
+  p.stateId = stateId;
+  p.stateTime = 0;
+  p.ctrl = false;
+  p.activeHitDef = null;
+  p.activeThrow = null;
+  p.bind = null;
+  applyStateHeader(p, ch, stateId);
 }
 
 function faceOpponent(p: Player, opp: Player): void {

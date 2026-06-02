@@ -25,6 +25,17 @@ export const MAX_POWER = 3000;
 export const MAX_OTG = 3;
 
 /**
+ * Dizzy (stun) accumulation. Each clean grounded hit adds its hit damage to the
+ * victim's stun meter; when it reaches STUN_MAX the victim is stunned (routed to
+ * a 'dizzy' state, if authored) and the meter resets. The meter only bleeds off
+ * (STUN_DECAY/tick) while the victim is NOT in hitstun — so a combo's hits all
+ * count toward the dizzy, but spaced-out single pokes never build up. ~130 ≈ a
+ * 3-light-hit or 2-heavy-hit combo.
+ */
+export const STUN_MAX = 130;
+export const STUN_DECAY = 1;
+
+/**
  * Ticks the round keeps simulating after a KO before the result is finalized —
  * a buffer so the defeated fighter can fall + lie down and the winner can pose.
  */
@@ -92,6 +103,8 @@ export interface Player {
   moveGuarded: boolean;
   /** OTG follow-up hits taken in the current knockdown (reset on wake-up). */
   otgHits: number;
+  /** Dizzy meter; fills on hits, bleeds off over time, triggers a stun at STUN_MAX. */
+  stun: number;
 }
 
 /** A grounded, still-alive downed state — the only state OTG follow-ups target. */
@@ -140,6 +153,7 @@ export function createWorld(p1Char = 'base', p2Char = 'base'): World {
         moveHit: false,
         moveGuarded: false,
         otgHits: 0,
+        stun: 0,
       },
       {
         characterId: p2Char,
@@ -163,6 +177,7 @@ export function createWorld(p1Char = 'base', p2Char = 'base'): World {
         moveHit: false,
         moveGuarded: false,
         otgHits: 0,
+        stun: 0,
       },
     ],
   };

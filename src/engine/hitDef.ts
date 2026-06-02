@@ -2,7 +2,7 @@ import type { HitEvent } from './collision.ts';
 import type { Character, HitDef } from './schema.ts';
 import { applyStateHeader } from './stateMachine.ts';
 import type { Player, World } from './world.ts';
-import { Btn, isDowned, MAX_OTG } from './world.ts';
+import { Btn, isDowned, MAX_OTG, STUN_MAX } from './world.ts';
 
 export function applyHits(
   events: HitEvent[],
@@ -95,7 +95,20 @@ export function applyHit(
     // (physics 'A', gravity) so they arc up and fall back down. Otherwise a
     // grounded victim in the gravity-less standing-hit state floats away forever.
     const launched = v.y > 0;
-    const targetState = isAir || launched ? 'hit.air' : 'hit.stand';
+    let targetState = isAir || launched ? 'hit.air' : 'hit.stand';
+
+    // Dizzy: grounded, non-launching hits build the stun meter. When it tops out
+    // the victim is stunned — routed to a 'dizzy' state (if the character has one)
+    // and the meter resets. Launches/air hits don't stun (they have their own
+    // knockdown reaction).
+    if (!isAir && !launched) {
+      victim.stun += hitDef.damage.hit;
+      if (victim.stun >= STUN_MAX && victimCharacter.states['dizzy']) {
+        targetState = 'dizzy';
+        victim.stun = 0;
+      }
+    }
+
     victim.stateId = targetState;
     victim.stateTime = 0;
     applyStateHeader(victim, victimCharacter, targetState);

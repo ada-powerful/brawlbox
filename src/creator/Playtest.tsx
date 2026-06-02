@@ -33,5 +33,8 @@ export function Playtest({
   // The chosen fighter takes `side`; the base stands in for the other slot.
   const [p1, p2] = side === 'p1' ? [fighter, base] : [base, fighter];
 
-  return <Match p1={p1} p2={p2} />;
+  // Creator playtest runs in showcase mode: unlimited timer + full health for
+  // both fighters, so a new user can freely try out controls without the round
+  // ever ending.
+  return <Match p1={p1} p2={p2} unlimited />;
 }

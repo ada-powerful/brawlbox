@@ -47,8 +47,12 @@ export class HealthBars {
 export class RoundTimer {
   readonly gfx: Container;
   private readonly text: Text;
+  private readonly unlimited: boolean;
 
-  constructor() {
+  /** `unlimited` makes the clock read "∞" forever — used by the creator playtest
+   *  so new users can experiment without the round ever timing out. */
+  constructor(unlimited = false) {
+    this.unlimited = unlimited;
     this.gfx = new Container();
     this.text = new Text({
       text: '',
@@ -67,6 +71,10 @@ export class RoundTimer {
   }
 
   update(world: World): void {
+    if (this.unlimited) {
+      this.text.text = '∞';
+      return;
+    }
     // Show whole seconds, rounding up so the clock reads "30" on tick 0 and
     // only hits "0" on the final tick.
     this.text.text = String(Math.ceil(world.roundTime / TICKS_PER_SECOND));

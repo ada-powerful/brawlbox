@@ -24,8 +24,8 @@ export interface GalleryHandle {
   destroy: () => void;
 }
 
-const HOLD_TICKS = 72;
-const ACTIVE_AT = 36;
+const HOLD_TICKS = 72; // minimum ticks an action is shown before auto-advancing
+const FRAME_TICKS = 7; // ticks per animation frame while playing a move
 
 // Cluster the character's actions by group, then by id, for a readable walk.
 const GROUP_ORDER: ActionGroup[] = [
@@ -88,6 +88,7 @@ function staticPlayer(character: Character, animId: string, animFrame: number): 
     moveHit: false,
     moveGuarded: false,
     otgHits: 0,
+    stun: 0,
   };
 }
 
@@ -141,9 +142,14 @@ export async function mountGallery(mount: HTMLElement, opts: GalleryOptions): Pr
   let raf = 0;
   let held = 0;
 
+  const frameCountOf = (id: string): number => character.animations?.[id]?.frames.length ?? 2;
+  // Hold each action long enough to play its full animation ~1.5× before advancing.
+  const holdFor = (id: string): number => Math.max(HOLD_TICKS, frameCountOf(id) * FRAME_TICKS * 2);
+
   const draw = (): void => {
     const action = actions[index]!;
-    const animFrame = held >= ACTIVE_AT ? 1 : 0;
+    // Play through the action's frames so multi-frame moves animate.
+    const animFrame = Math.floor(held / FRAME_TICKS) % frameCountOf(action.id);
     const p = staticPlayer(character, action.id, animFrame);
     if (isAirborne(action.id)) p.pos.y = 130;
     renderer.update(p, p, 1);
@@ -160,7 +166,7 @@ export async function mountGallery(mount: HTMLElement, opts: GalleryOptions): Pr
   const frame = (): void => {
     if (playing) {
       held++;
-      if (held >= HOLD_TICKS) {
+      if (held >= holdFor(actions[index]!.id)) {
         held = 0;
         index = (index + 1) % actions.length;
       }

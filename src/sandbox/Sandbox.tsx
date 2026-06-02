@@ -10,7 +10,9 @@ import { BASE_ATLAS_URL, BASE_CHARACTER, P1_COLOR, P2_COLOR } from '@/creator/de
 import { bakeFromSheet } from './bake.ts';
 import { HONDA_CHARACTER } from './honda.ts';
 import { KYO_TEMPLATE } from './kyoTemplate.ts';
+import { KYO2_CHARACTER, KYO2_ATLAS_URL } from './kyo2.ts';
 import kyoSheetUrl from './kyo-sheet.webp';
+import { hillsideStage } from '../stages/hillside/index.ts';
 
 interface Fighter {
   id: string;
@@ -39,17 +41,27 @@ const HONDA_FIGHTER: Fighter = {
   character: HONDA_CHARACTER,
 };
 
+// Full 36-action Kyo from the complete reference sheet (pre-baked atlas). Stage 1:
+// all rows mapped to animations — open the Action gallery to review each one.
+const KYO2_FIGHTER: Fighter = {
+  id: 'kyo2',
+  label: 'Kyo (full 36-action sheet)',
+  character: KYO2_CHARACTER,
+  atlasUrl: KYO2_ATLAS_URL,
+};
+
 type Mode = 'match' | 'gallery';
 
 export function Sandbox() {
   const mountRef = useRef<HTMLDivElement>(null);
   const handleRef = useRef<GameHandle | null>(null);
   const galleryRef = useRef<GalleryHandle | null>(null);
-  const [fighters, setFighters] = useState<Fighter[]>([BASE_FIGHTER, HONDA_FIGHTER]);
+  const [fighters, setFighters] = useState<Fighter[]>([BASE_FIGHTER, HONDA_FIGHTER, KYO2_FIGHTER]);
   const [p1Id, setP1Id] = useState('base');
   const [p2Id, setP2Id] = useState('base');
   const [mode, setMode] = useState<Mode>('match');
   const [freezeTimer, setFreezeTimer] = useState(false);
+  const [infiniteHealth, setInfiniteHealth] = useState(false);
   const [status, setStatus] = useState('Baking sheet character…');
   const [error, setError] = useState<string | null>(null);
 
@@ -108,12 +120,14 @@ export function Sandbox() {
       mountGame(mount, {
         p1: { character: p1.character, atlasUrl: p1.atlasUrl, color: P1_COLOR },
         p2: { character: p2.character, atlasUrl: p2.atlasUrl, color: P2_COLOR },
+        stage: hillsideStage,
       })
         .then((h) => {
           if (disposed) h.destroy();
           else {
             handleRef.current = h;
             h.setFreezeTimer(freezeTimer);
+            h.setInfiniteHealth(infiniteHealth);
           }
         })
         .catch((e) => setError(`Mount failed: ${(e as Error).message}`));
@@ -128,17 +142,20 @@ export function Sandbox() {
     };
   }, [fighters, p1Id, p2Id, mode]);
 
-  // Push timer-freeze changes to the live match handle without remounting, so
-  // toggling mid-round keeps the current state. Also bind `T` to toggle it.
+  // Push timer-freeze / infinite-health changes to the live match handle without
+  // remounting, so toggling mid-round keeps the current state. Bind `T` (timer)
+  // and `H` (health) to toggle them.
   useEffect(() => {
     if (mode !== 'match') return;
     handleRef.current?.setFreezeTimer(freezeTimer);
+    handleRef.current?.setInfiniteHealth(infiniteHealth);
     const onKey = (e: KeyboardEvent): void => {
       if (e.code === 'KeyT') setFreezeTimer((v) => !v);
+      else if (e.code === 'KeyH') setInfiniteHealth((v) => !v);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [freezeTimer, mode]);
+  }, [freezeTimer, infiniteHealth, mode]);
 
   // Gallery keyboard controls: ←/→ step, space play/pause.
   useEffect(() => {
@@ -232,6 +249,19 @@ export function Sandbox() {
             >
               {freezeTimer ? 'Timer frozen (T)' : 'Freeze timer (T)'}
             </button>
+            <button
+              onClick={() => setInfiniteHealth((v) => !v)}
+              style={{
+                padding: '4px 10px',
+                borderRadius: 6,
+                background: infiniteHealth ? '#2e4e3a' : '#26262e',
+                color: '#eee',
+                border: `1px solid ${infiniteHealth ? '#4a7a5a' : '#333'}`,
+                cursor: 'pointer',
+              }}
+            >
+              {infiniteHealth ? 'HP infinite (H)' : 'Infinite HP (H)'}
+            </button>
           </>
         ) : (
           <>
@@ -262,7 +292,7 @@ export function Sandbox() {
       <p style={{ fontSize: 12, color: '#9a9aa5', margin: 0, textAlign: 'center' }}>
         {mode === 'gallery'
           ? "Gallery: cycling the selected fighter's own actions · ←/→ step · Space play/pause · colour = action group"
-          : 'P1: WASD move · J/K/L attack · P2: arrows + numpad · R restart · T freeze timer · F1 / ` debug overlay'}
+          : 'P1: WASD move · J/K/L attack · P2: arrows + numpad · R restart · T freeze timer · H infinite HP · F1 / ` debug overlay'}
       </p>
       {error ? (
         <p style={{ fontSize: 13, color: '#ff6b6b' }}>{error}</p>

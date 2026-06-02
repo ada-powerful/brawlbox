@@ -26,6 +26,7 @@ function makePlayer(animId = 'test', animFrame = 0, animTime = 0): Player {
     moveHit: false,
     moveGuarded: false,
     otgHits: 0,
+    stun: 0,
   };
 }
 

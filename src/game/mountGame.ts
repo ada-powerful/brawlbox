@@ -12,6 +12,7 @@ import { DebugOverlay } from '../render/debug.ts';
 import { FighterRenderer } from '../render/fighter.ts';
 import { HealthBars, MatchOverlay, RoundTimer } from '../render/hud.ts';
 import { createStage } from '../render/stage.ts';
+import { Background, type StageArt } from '../render/background.ts';
 import { assertAtlasCoverage } from '../runtime/atlas.ts';
 import { loadAtlasTextures } from '../runtime/assets.ts';
 import { startLoop } from '../runtime/loop.ts';
@@ -26,6 +27,18 @@ export interface FighterSpec {
 export interface MountOptions {
   p1: FighterSpec;
   p2: FighterSpec;
+  /**
+   * Showcase mode: the round timer never counts down (HUD reads "∞") and both
+   * fighters' health is pinned full every tick, so the match never ends. Used by
+   * the creator playtest so a new user can freely experiment with the controls.
+   */
+  unlimited?: boolean;
+  /**
+   * Stage art drawn behind the fighters (under the camera, so it pans/zooms with
+   * the action). Omit for the phase-1 flat backdrop. Render-only — never touches
+   * the deterministic sim.
+   */
+  stage?: StageArt;
 }
 
 export interface GameHandle {
@@ -33,6 +46,8 @@ export interface GameHandle {
   toggleDebug: () => void;
   /** Freeze the round timer so the match never times out — for continuous debugging. */
   setFreezeTimer: (on: boolean) => void;
+  /** Pin both fighters' health full every tick so neither can be KO'd — for continuous debugging. */
+  setInfiniteHealth: (on: boolean) => void;
   destroy: () => void;
 }
 
@@ -92,7 +107,7 @@ function updateCameraFn(camera: Container): (prev: World, curr: World, alpha: nu
 }
 
 export async function mountGame(mount: HTMLElement, opts: MountOptions): Promise<GameHandle> {
-  const { p1, p2 } = opts;
+  const { p1, p2, unlimited = false, stage } = opts;
   for (const f of [p1, p2]) assertAtlasCoverage(f.character);
 
   // Engine character registry keyed by id. Distinct ids => both registered.
@@ -116,7 +131,11 @@ export async function mountGame(mount: HTMLElement, opts: MountOptions): Promise
   // can be zoomed/panned to frame the action. The HUD stays in screen space.
   const camera = new Container();
   app.stage.addChild(camera);
-  camera.addChild(createStage());
+  // Stage art (if any) sits at the back of the camera so it pans/zooms with the
+  // action; far layers parallax-drift via background.update each frame. The flat
+  // phase-1 ground markers are the fallback when no stage is supplied.
+  const background = stage ? await Background.create(stage) : null;
+  camera.addChild(background ? background.view : createStage());
 
   const r1 = new FighterRenderer(p1.color, { character: p1.character, textures: tex1 });
   const r2 = new FighterRenderer(p2.color, { character: p2.character, textures: tex2 });
@@ -127,7 +146,7 @@ export async function mountGame(mount: HTMLElement, opts: MountOptions): Promise
 
   const healthBars = new HealthBars();
   app.stage.addChild(healthBars.gfx);
-  const roundTimer = new RoundTimer();
+  const roundTimer = new RoundTimer(unlimited);
   app.stage.addChild(roundTimer.gfx);
   const matchOverlay = new MatchOverlay();
   app.stage.addChild(matchOverlay.gfx);
@@ -139,14 +158,27 @@ export async function mountGame(mount: HTMLElement, opts: MountOptions): Promise
   // When frozen, the round timer is restored after each tick so it never reaches
   // zero and times out the match — lets the sandbox run a round indefinitely.
   let freezeTimer = false;
+  // When on, both fighters' health is pinned to its pre-tick value (they start
+  // full, so restoring each tick = infinite HP) so a round never ends on a KO.
+  let infiniteHealth = false;
 
   const handle = startLoop({
     createWorld: () => createWorld(p1.character.meta.id, p2.character.meta.id),
     pollInputs,
     tick: (w, inp) => {
       const before = w.roundTime;
+      // Snapshot life before the tick so showcase mode can pin it back, keeping
+      // both bars full (they start full, so restoring each tick = infinite HP).
+      const beforeLife = w.players.map((p) => p?.life);
       const next = tick(w, characters, inp);
-      if (freezeTimer) next.roundTime = before;
+      if (freezeTimer || unlimited) next.roundTime = before;
+      if (infiniteHealth || unlimited) {
+        for (let i = 0; i < next.players.length; i++) {
+          const p = next.players[i];
+          const life = beforeLife[i];
+          if (p && life !== undefined) p.life = life;
+        }
+      }
       return next;
     },
     render: (prev, curr, alpha) => {
@@ -157,6 +189,7 @@ export async function mountGame(mount: HTMLElement, opts: MountOptions): Promise
       if (a && b) r1.update(a, b, alpha);
       if (c && d) r2.update(c, d, alpha);
       updateCamera(prev, curr, alpha);
+      background?.update(camera.x, camera.scale.x);
       healthBars.update(curr);
       roundTimer.update(curr);
       matchOverlay.update(curr);
@@ -178,6 +211,9 @@ export async function mountGame(mount: HTMLElement, opts: MountOptions): Promise
     toggleDebug: () => debugOverlay.toggle(),
     setFreezeTimer: (on: boolean) => {
       freezeTimer = on;
+    },
+    setInfiniteHealth: (on: boolean) => {
+      infiniteHealth = on;
     },
     destroy: () => {
       handle.stop();
