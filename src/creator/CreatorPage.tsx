@@ -248,12 +248,10 @@ export function CreatorPage() {
   const generate = async (): Promise<void> => {
     setError(null);
     setStatus(null);
-    // A reference photo can stand in for the text prompt (the image drives the
-    // look); otherwise a description is required.
-    if (!prompt.trim() && !(template && refImage)) {
-      setError(
-        template ? 'Describe the look, or upload a reference photo.' : 'Describe the character you want.',
-      );
+    // Two ways in: a reference photo (the image drives the look, notes optional)
+    // or a text prompt. One of them is required; the photo alone is enough.
+    if (!prompt.trim() && !refImage) {
+      setError('Describe your fighter, or upload a reference photo.');
       return;
     }
     // Template-based creation: clone the base (+ name/describe from the photo).
@@ -278,10 +276,23 @@ export function CreatorPage() {
     }
     setBusy(true);
     try {
+      // A reference photo can drive a freeform design too: describe it first so
+      // the LLM gets an appearance prompt even when the notes box is left empty.
+      let designPrompt = prompt.trim();
+      if (refImage && BACKEND_MODE && API_BASE) {
+        setStatus('Reading your photo…');
+        try {
+          const idea = await describeFromImage(API_BASE, refImage, prompt.trim(), token);
+          designPrompt = [idea.description, prompt.trim()].filter(Boolean).join(' — ') || designPrompt;
+        } catch (e) {
+          // Non-fatal: fall back to whatever notes were typed.
+          setError(`Couldn't read the photo (using your notes): ${(e as Error).message}`);
+        }
+      }
       const result =
         BACKEND_MODE && API_BASE
-          ? await generateCharacterViaBackend(API_BASE, { prompt: prompt.trim() }, token)
-          : await generateCharacter({ prompt: prompt.trim() }, createOpenAIProvider(key!));
+          ? await generateCharacterViaBackend(API_BASE, { prompt: designPrompt }, token)
+          : await generateCharacter({ prompt: designPrompt }, createOpenAIProvider(key!));
       // Give it a unique id so auto-save can't clobber a prior fighter that the
       // LLM happened to give the same meta.id.
       const newChar = withUniqueId(result.character);
