@@ -73,6 +73,11 @@ export function CreatorPage() {
   const [prompt, setPrompt] = useState(EXAMPLE);
   const [busy, setBusy] = useState(false);
   const [imgBusy, setImgBusy] = useState(false);
+  // characterId whose sprites are currently generating. While set, that fighter
+  // shows a "Generating…" badge and is not selectable (it has no usable atlas
+  // until done); other fighters are locked from loading too, to avoid swapping
+  // the working character mid-bake.
+  const [generatingId, setGeneratingId] = useState<string | null>(null);
   const [imgProgress, setImgProgress] = useState<{ done: number; total: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
@@ -318,6 +323,7 @@ export function CreatorPage() {
       const token = await ensureToken();
       if (token === undefined) return; // redirecting to sign in
       setImgBusy(true);
+      setGeneratingId(character.meta.id);
       setImgProgress({ done: 0, total: 0 });
       try {
         await generateTemplateSprites(template, character, token, API_BASE);
@@ -325,6 +331,7 @@ export function CreatorPage() {
         setError((e as Error).message);
       } finally {
         setImgBusy(false);
+        setGeneratingId(null);
         setImgProgress(null);
       }
       return;
@@ -340,6 +347,7 @@ export function CreatorPage() {
       if (token === undefined) return; // redirecting to sign in
     }
     setImgBusy(true);
+    setGeneratingId(character.meta.id);
     setImgProgress({ done: 0, total: 0 });
     try {
       if (BACKEND_MODE && API_BASE) {
@@ -378,6 +386,7 @@ export function CreatorPage() {
       setError((e as Error).message);
     } finally {
       setImgBusy(false);
+      setGeneratingId(null);
       setImgProgress(null);
     }
   };
@@ -408,6 +417,10 @@ export function CreatorPage() {
   };
 
   const loadSaved = (c: CloudCharacter): void => {
+    // Locked while a fighter is mid-generation: switching would swap the working
+    // character out from under the running bake, and the in-progress fighter has
+    // no usable atlas yet anyway.
+    if (imgBusy) return;
     setCharacter(c.character);
     setJson(JSON.stringify(c.character, null, 2));
     setSaveState('idle'); // a loaded character is already persisted
@@ -668,56 +681,85 @@ export function CreatorPage() {
                     Characters you generate are saved here automatically and stay across sign-ins.
                   </p>
                 )}
-                {activeSaved.map((c) => (
-                  <div key={c.characterId} className="flex items-center gap-2">
-                    <Headshot character={c.character} atlasUrl={c.atlasUrl} name={c.name} />
-                    {renaming?.id === c.characterId ? (
-                      <Input
-                        className="h-8 flex-1"
-                        autoFocus
-                        value={renaming.name}
-                        onChange={(e) => setRenaming({ id: c.characterId, name: e.target.value })}
-                        onBlur={() => void renameSaved(c.characterId, renaming.name)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') void renameSaved(c.characterId, renaming.name);
-                          if (e.key === 'Escape') {
-                            cancelRenameRef.current = true;
-                            setRenaming(null);
-                          }
-                        }}
-                      />
-                    ) : (
-                      <button
-                        className={`flex-1 truncate text-left text-sm hover:underline ${
-                          character?.meta.id === c.characterId ? 'font-semibold text-primary' : ''
-                        }`}
-                        onClick={() => loadSaved(c)}
-                      >
-                        {c.name}
-                        {c.shared && <span className="ml-1 text-xs text-primary">· shared</span>}
-                      </button>
-                    )}
-                    <div className="flex shrink-0 items-center gap-1">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setRenaming({ id: c.characterId, name: c.name })}
-                      >
-                        Rename
-                      </Button>
-                      <Button variant="ghost" size="sm" onClick={() => void toggleShare(c)}>
-                        {c.shared ? 'Unshare' : 'Share'}
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => void setArchived(c.characterId, true)}
-                      >
-                        Archive
-                      </Button>
+                {activeSaved.map((c) => {
+                  const isGenerating = c.characterId === generatingId;
+                  // Another fighter is mid-generation → lock this row from loading.
+                  const locked = imgBusy && !isGenerating;
+                  return (
+                    <div
+                      key={c.characterId}
+                      className={`flex items-center gap-2 ${isGenerating || locked ? 'opacity-70' : ''}`}
+                    >
+                      <Headshot character={c.character} atlasUrl={c.atlasUrl} name={c.name} />
+                      {isGenerating ? (
+                        <span className="flex-1 truncate text-sm font-medium">
+                          {c.name}
+                          <span className="ml-2 animate-pulse text-xs text-primary">
+                            ● Generating sprites…
+                          </span>
+                        </span>
+                      ) : renaming?.id === c.characterId ? (
+                        <Input
+                          className="h-8 flex-1"
+                          autoFocus
+                          value={renaming.name}
+                          onChange={(e) => setRenaming({ id: c.characterId, name: e.target.value })}
+                          onBlur={() => void renameSaved(c.characterId, renaming.name)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') void renameSaved(c.characterId, renaming.name);
+                            if (e.key === 'Escape') {
+                              cancelRenameRef.current = true;
+                              setRenaming(null);
+                            }
+                          }}
+                        />
+                      ) : (
+                        <button
+                          className={`flex-1 truncate text-left text-sm ${
+                            locked ? 'cursor-not-allowed' : 'hover:underline'
+                          } ${character?.meta.id === c.characterId ? 'font-semibold text-primary' : ''}`}
+                          onClick={() => loadSaved(c)}
+                          disabled={locked}
+                        >
+                          {c.name}
+                          {c.shared && <span className="ml-1 text-xs text-primary">· shared</span>}
+                        </button>
+                      )}
+                      <div className="flex shrink-0 items-center gap-1">
+                        {isGenerating ? (
+                          <span className="text-xs text-muted-foreground">~2 min</span>
+                        ) : (
+                          <>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              disabled={locked}
+                              onClick={() => setRenaming({ id: c.characterId, name: c.name })}
+                            >
+                              Rename
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              disabled={locked}
+                              onClick={() => void toggleShare(c)}
+                            >
+                              {c.shared ? 'Unshare' : 'Share'}
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              disabled={locked}
+                              onClick={() => void setArchived(c.characterId, true)}
+                            >
+                              Archive
+                            </Button>
+                          </>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
 
                 {archivedSaved.length > 0 && (
                   <>
@@ -766,8 +808,9 @@ export function CreatorPage() {
                 {gallery.map((c) => (
                   <button
                     key={c.characterId}
-                    className="truncate text-left text-sm hover:underline"
+                    className={`truncate text-left text-sm ${imgBusy ? 'cursor-not-allowed opacity-70' : 'hover:underline'}`}
                     onClick={() => loadSaved(c)}
+                    disabled={imgBusy}
                   >
                     {c.name}
                   </button>
