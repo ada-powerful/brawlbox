@@ -2,16 +2,22 @@
 # and real static assets (index.html, sandbox.html, privacy.html, /assets/*, …)
 # are served before any 200 rewrite below applies.
 #
-# Assets first — critical: a request for a MISSING build asset must NOT fall back
-# to index.html. The SPA fallback serves index.html as 200 text/html with a 4h
-# Cache-Control, so a single miss during a deploy-propagation window gets cached
-# at the edge — every later request for that hashed chunk then returns HTML, and
-# the browser fails the module import with "Expected a JavaScript module but got
-# text/html". Returning a real 404 keeps the response uncacheable-as-asset and
-# lets the next request fetch the real chunk once it has propagated.
-/assets/* /404.html 404
+# NOTE: _redirects only supports status 200 (proxy/rewrite) and 301/302/303/307/
+# 308 (redirects). 404 is NOT a valid status here — a 404 rule is malformed and
+# poisons parsing of every rule after it, which silently disabled the SPA fallback
+# below and 404'd all deep links (/create, /play). Do not reintroduce one.
+#
+# Asset guard — critical: a request for a MISSING build asset must NOT fall back
+# to index.html. The SPA fallback serves index.html as 200 text/html, so a miss
+# during a deploy-propagation window can get cached at the edge; every later
+# request for that hashed chunk then returns HTML and the browser fails the module
+# import with "Expected a JavaScript module but got text/html". Existing assets
+# are served as files before this rule ever runs; only a MISSING /assets/* reaches
+# it, where proxy-to-self resolves to no file → Cloudflare's automatic 404,
+# keeping the response uncacheable-as-asset instead of HTML. Must precede /*.
+/assets/* /assets/:splat 200
 #
 # SPA fallback for the client-side router (react-router). Routes like /play and
 # /create have no backing file, so direct loads / refreshes resolve to index.html
-# and the router takes over. Listed after the assets rule so it never shadows it.
+# and the router takes over. Listed after the asset guard so it never shadows it.
 /* /index.html 200
