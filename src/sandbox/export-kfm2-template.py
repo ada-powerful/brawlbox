@@ -33,8 +33,16 @@ OUT_JSON = os.path.join(HERE, "kfm2-template.json")
 # ~4K: pin the width to the canonical 4K width, preserve the grid's aspect.
 TARGET_W = 3840
 
-# Palette (dark charcoal bg suits KFM's light-clothed sprites).
-BG = (20, 22, 30, 255)
+# Green-screen background. The template's ONLY purpose is to be fed to NB2
+# (nano-banana-2) as the layout reference for a re-skin: a flat chroma-green
+# backdrop both (a) helps the image model cleanly separate each pose from the
+# background (its training distribution is full of green screen) and (b) lets the
+# frontend slicer key the background out by auto-sampling it. We deliberately do
+# NOT draw grid lines anymore: a uniform green field keys out cleanly, and the
+# poses' fixed positions already encode the cell layout the slicer divides back
+# out (grid cols/rows live in the companion JSON, not burned into the image).
+BG = (0, 255, 0, 255)
+DRAW_GRID = False
 GRID = (58, 63, 77, 255)
 GRID_EDGE = (90, 96, 112, 255)
 
@@ -63,13 +71,14 @@ def main() -> None:
 
     draw = ImageDraw.Draw(canvas)
 
-    # 2) Grid lines.
-    for c in range(cols + 1):
-        x = round(c * tcw)
-        draw.line([(x, 0), (x, out_h)], fill=GRID_EDGE if c in (0, cols) else GRID, width=2)
-    for r in range(rows + 1):
-        y = round(r * tch)
-        draw.line([(0, y), (out_w, y)], fill=GRID_EDGE if r in (0, rows) else GRID, width=2)
+    # 2) Grid lines (opt-in; off for the green-screen template — see BG note).
+    if DRAW_GRID:
+        for c in range(cols + 1):
+            x = round(c * tcw)
+            draw.line([(x, 0), (x, out_h)], fill=GRID_EDGE if c in (0, cols) else GRID, width=2)
+        for r in range(rows + 1):
+            y = round(r * tch)
+            draw.line([(0, y), (out_w, y)], fill=GRID_EDGE if r in (0, rows) else GRID, width=2)
 
     # 3) Build the code->cell map for the companion JSON. No text is drawn on
     #    the image -- the per-frame boundary boxes (the grid above) are the only
