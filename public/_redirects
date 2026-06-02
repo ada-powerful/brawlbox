@@ -1,25 +1,21 @@
-# Cloudflare Pages routing. Rules are evaluated top-to-bottom, first match wins,
-# and real static assets (index.html, sandbox.html, privacy.html, /assets/*, …)
-# are served before any 200 rewrite below applies.
+# Cloudflare Pages routing. Real static assets (index.html, sandbox.html,
+# privacy.html, /assets/*, …) are served before the 200 rewrite below applies.
 #
 # NOTE: do NOT add a top-level /404.html file. Cloudflare Pages only runs its
-# SPA fallback (this file's `/* /index.html 200`) when there is NO top-level
+# SPA fallback (the `/* /index.html 200` rule below) when there is NO top-level
 # 404.html — when one exists, Pages serves it for every not-found path and the
-# rewrite below never fires, 404'ing all deep links (/create, /play) on refresh.
+# rewrite never fires, 404'ing all deep links (/create, /play) on refresh.
 # Unknown routes are handled in-app by react-router's catch-all instead.
 # Also: 404 is not a valid _redirects status (only 200 / 301-308); never use it.
 #
-# Asset guard — critical: a request for a MISSING build asset must NOT fall back
-# to index.html. The SPA fallback serves index.html as 200 text/html, so a miss
-# during a deploy-propagation window can get cached at the edge; every later
-# request for that hashed chunk then returns HTML and the browser fails the module
-# import with "Expected a JavaScript module but got text/html". Existing assets
-# are served as files before this rule ever runs; only a MISSING /assets/* reaches
-# it, where proxy-to-self resolves to no file → Cloudflare's automatic 404,
-# keeping the response uncacheable-as-asset instead of HTML. Must precede /*.
-/assets/* /assets/:splat 200
+# Known trade-off: a MISSING /assets/* hashed chunk resolves to index.html as
+# 200 text/html (failing the browser's module import), not a 404 — _redirects
+# cannot return 404, so there is no way to guard against it here. Low risk:
+# deploys are atomic and index.html is must-revalidate, so a poisoned URL is
+# always a stale hash no current client requests; self-healing on reload. Real
+# 404s for missing assets would require a Pages Function or nested 404.html.
 #
 # SPA fallback for the client-side router (react-router). Routes like /play and
 # /create have no backing file, so direct loads / refreshes resolve to index.html
-# and the router takes over. Listed after the asset guard so it never shadows it.
+# and the router takes over.
 /* /index.html 200
