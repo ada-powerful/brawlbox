@@ -9,9 +9,9 @@ import { mountGallery, type GalleryHandle } from '@/game/mountGallery.ts';
 import { BASE_ATLAS_URL, BASE_CHARACTER, P1_COLOR, P2_COLOR } from '@/creator/defaults.ts';
 import { bakeFromSheet } from './bake.ts';
 import { HONDA_CHARACTER } from './honda.ts';
-import { KYO_TEMPLATE } from './kyoTemplate.ts';
-import { KYO2_CHARACTER, KYO2_ATLAS_URL } from './kyo2.ts';
-import kyoSheetUrl from './kyo-sheet.webp';
+import { KFM_TEMPLATE } from './kfmTemplate.ts';
+import { KFM2_CHARACTER, KFM2_ATLAS_URL } from './kfm2.ts';
+import kfmSheetUrl from './kfm-sheet.webp';
 import { hillsideStage } from '../stages/hillside/index.ts';
 
 interface Fighter {
@@ -41,13 +41,13 @@ const HONDA_FIGHTER: Fighter = {
   character: HONDA_CHARACTER,
 };
 
-// Full 36-action Kyo from the complete reference sheet (pre-baked atlas). Stage 1:
+// Full 36-action KFM from the complete reference sheet (pre-baked atlas). Stage 1:
 // all rows mapped to animations — open the Action gallery to review each one.
-const KYO2_FIGHTER: Fighter = {
-  id: 'kyo2',
-  label: 'Kyo (full 36-action sheet)',
-  character: KYO2_CHARACTER,
-  atlasUrl: KYO2_ATLAS_URL,
+const KFM2_FIGHTER: Fighter = {
+  id: 'kfm2',
+  label: 'KFM (full 36-action sheet)',
+  character: KFM2_CHARACTER,
+  atlasUrl: KFM2_ATLAS_URL,
 };
 
 type Mode = 'match' | 'gallery';
@@ -56,7 +56,7 @@ export function Sandbox() {
   const mountRef = useRef<HTMLDivElement>(null);
   const handleRef = useRef<GameHandle | null>(null);
   const galleryRef = useRef<GalleryHandle | null>(null);
-  const [fighters, setFighters] = useState<Fighter[]>([BASE_FIGHTER, HONDA_FIGHTER, KYO2_FIGHTER]);
+  const [fighters, setFighters] = useState<Fighter[]>([BASE_FIGHTER, HONDA_FIGHTER, KFM2_FIGHTER]);
   const [p1Id, setP1Id] = useState('base');
   const [p2Id, setP2Id] = useState('base');
   const [mode, setMode] = useState<Mode>('match');
@@ -70,7 +70,7 @@ export function Sandbox() {
   useEffect(() => {
     let disposed = false;
     let bakedUrl: string | null = null;
-    bakeFromSheet(kyoSheetUrl, KYO_TEMPLATE, { id: 'kyo', name: 'Kyo (mapped actions)' })
+    bakeFromSheet(kfmSheetUrl, KFM_TEMPLATE, { id: 'kfm', name: 'KFM (mapped actions)' })
       .then((baked) => {
         if (disposed) {
           URL.revokeObjectURL(baked.atlasUrl);
@@ -79,9 +79,9 @@ export function Sandbox() {
         bakedUrl = baked.atlasUrl;
         setFighters((prev) => [
           ...prev,
-          { id: 'kyo', label: 'Kyo (sheet sprites)', ...baked },
+          { id: 'kfm', label: 'KFM (sheet sprites)', ...baked },
         ]);
-        setP1Id('kyo');
+        setP1Id('kfm');
         setStatus('Ready.');
       })
       .catch((e) => setError(`Sheet bake failed: ${(e as Error).message}`));

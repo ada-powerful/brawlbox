@@ -124,21 +124,21 @@ drives real input scripts through `tick`:
   step, Space play/pause, auto-advance otherwise. Great for eyeballing art
   coverage and reading each pose.
 
-## Round 7 — Kyo action template (sheet row → action mapping) (DONE)
+## Round 7 — KFM action template (sheet row → action mapping) (DONE)
 
 The MUGEN action sheet is now a reusable **character template**: each row maps to
 preset actions, and a generated/retextured sheet with the same layout slots in.
 
-- **`templateManifest.ts`** — `DEFAULT_TEMPLATE_MANIFEST` rewritten to the Kyo
+- **`templateManifest.ts`** — `DEFAULT_TEMPLATE_MANIFEST` rewritten to the KFM
   sheet's 13 detected bands (frame counts verified: 5,6,7,4,6,5,6,11,6,10,7,2,6),
   mapping ~36 per-action sprite keys to `(row, frac)` where `frac = index/(len-1)`.
   Rows: 0 idle · 1 walk · 2 light-jump · 3 high-jump · 4 dash · 5 guard
   (stand+crouch) · 6 punch (stand+crouch) · 7 kick (stand/crouch/jump-attack/
   charged) · 8 charged-punch · 9 hit (stand+crouch) · 10 knockdown+getup · 11
   lying/OTG · 12 props.
-- **`src/sandbox/kyoTemplate.ts`** — `KYO_TEMPLATE`: reuses `base`'s state machine
+- **`src/sandbox/kfmTemplate.ts`** — `KFM_TEMPLATE`: reuses `base`'s state machine
   but its animations reference the per-action sprite keys, so `bakeFromSheet`
-  slices the right frame per action. The sandbox bakes Kyo through it; the gallery
+  slices the right frame per action. The sandbox bakes KFM through it; the gallery
   shows each action with the correct sheet frame.
 - A mapping sim asserts every template sprite key resolves to its intended row.
 

@@ -12,7 +12,7 @@ export interface FrameSelector {
 }
 
 // Layout of the MUGEN action template (rows top→bottom), grounded in the detected
-// bands of the Kyo reference sheet (13 bands; frame counts in parens):
+// bands of the KFM reference sheet (13 bands; frame counts in parens):
 //   0  idle (5)
 //   1  walk fwd/back (6)
 //   2  light jump → land (7)
