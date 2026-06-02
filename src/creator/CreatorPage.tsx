@@ -276,6 +276,13 @@ export function CreatorPage() {
       // aspect) and map them to keys by the template's known grid structure.
       const images = await sliceSheetByDetection(fetched.bitmap, tpl.grid, keys, tpl.bg);
       const packed = await packSprites(images, {
+        // Larger cells than the 160 default so 4K poses are packed near 1:1
+        // (downscaled, sharp) instead of thrown away. 16×240=3840 / 15×240=3600,
+        // under the 4096 GPU texture limit. cellH only affects spriteScale, not
+        // on-screen size (= content/cellH × size.height), so the fighter is
+        // unchanged in size — just crisper.
+        cellW: 240,
+        cellH: 240,
         chromaKey: tpl.bg,
         chromaTolerance: 110,
         despill: true,
