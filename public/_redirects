@@ -2,10 +2,12 @@
 # and real static assets (index.html, sandbox.html, privacy.html, /assets/*, …)
 # are served before any 200 rewrite below applies.
 #
-# NOTE: _redirects only supports status 200 (proxy/rewrite) and 301/302/303/307/
-# 308 (redirects). 404 is NOT a valid status here — a 404 rule is malformed and
-# poisons parsing of every rule after it, which silently disabled the SPA fallback
-# below and 404'd all deep links (/create, /play). Do not reintroduce one.
+# NOTE: do NOT add a top-level /404.html file. Cloudflare Pages only runs its
+# SPA fallback (this file's `/* /index.html 200`) when there is NO top-level
+# 404.html — when one exists, Pages serves it for every not-found path and the
+# rewrite below never fires, 404'ing all deep links (/create, /play) on refresh.
+# Unknown routes are handled in-app by react-router's catch-all instead.
+# Also: 404 is not a valid _redirects status (only 200 / 301-308); never use it.
 #
 # Asset guard — critical: a request for a MISSING build asset must NOT fall back
 # to index.html. The SPA fallback serves index.html as 200 text/html, so a miss
