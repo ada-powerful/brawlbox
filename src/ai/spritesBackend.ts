@@ -12,16 +12,26 @@ import type { Character } from '../engine/schema.ts';
 import { collectReferencedSprites } from '../runtime/atlas.ts';
 import { detectFrames } from '../creator/image/detectFrames.ts';
 import { selectFrameIndices } from '../creator/image/templateManifest.ts';
-import type { PixelBox } from '../creator/image/alpha.ts';
+import type { PixelBox, RGB } from '../creator/image/alpha.ts';
 
-/** A retextured sheet plus everything the review console needs to edit it. */
-export interface DetectedSheet {
+/** A fetched retextured sheet: decoded bitmap + its sampled background color. */
+export interface FetchedSheet {
   /** Object URL of the fetched sheet PNG — for display. Caller must revoke it. */
   sheetUrl: string;
   /** Decoded sheet, kept for cropping. Caller must close() it when done. */
   bitmap: ImageBitmap;
   width: number;
   height: number;
+  /**
+   * The sheet's background color, sampled from the top-left pixel. Whatever flat
+   * backdrop NB2 produced (green for the green-screen templates) — pass it as
+   * packSprites' chromaKey so the cutout adapts instead of assuming one color.
+   */
+  bg: RGB;
+}
+
+/** A retextured sheet plus everything the review console needs to edit it. */
+export interface DetectedSheet extends FetchedSheet {
   /** Detected frame rects, in detection order (top→bottom, left→right). */
   frames: PixelBox[];
   /** spriteKey -> index into `frames`. The default mapping; user-editable. */
@@ -69,24 +79,32 @@ async function cropToBlob(bitmap: ImageBitmap, box: PixelBox): Promise<Blob> {
   return canvasToBlob(canvas);
 }
 
+/** Sample the top-left pixel as the sheet's flat background color (cheap 1×1). */
+function sampleCorner(bitmap: ImageBitmap): RGB {
+  const canvas = makeCanvas(1, 1);
+  const ctx = context2d(canvas);
+  ctx.drawImage(bitmap, 0, 0, 1, 1, 0, 0, 1, 1);
+  const d = ctx.getImageData(0, 0, 1, 1).data;
+  return { r: d[0] ?? 0, g: d[1] ?? 0, b: d[2] ?? 0 };
+}
+
 /**
- * POST the description to the backend, fetch the retextured sheet, detect its
- * frames, and compute the default spriteKey→frame mapping for `character`.
- * Returns everything the review console needs; the caller owns `sheetUrl`
- * (revoke) and `bitmap` (close).
+ * POST the description to the backend and fetch the retextured sheet. `templateKey`
+ * selects which preset layout sheet the backend retextures (defaults server-side).
+ * The caller owns `sheetUrl` (revoke) and `bitmap` (close).
  */
-export async function fetchSheetAndDetect(
+export async function fetchSheetBitmap(
   baseUrl: string,
   description: string,
-  character: Character,
   token?: string | null,
-): Promise<DetectedSheet> {
+  templateKey?: string,
+): Promise<FetchedSheet> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (token) headers.Authorization = `Bearer ${token}`;
   const res = await fetch(`${baseUrl}/generate/sprites`, {
     method: 'POST',
     headers,
-    body: JSON.stringify({ description }),
+    body: JSON.stringify(templateKey ? { description, templateKey } : { description }),
   });
   if (!res.ok) {
     const text = await res.text().catch(() => '');
@@ -99,26 +117,42 @@ export async function fetchSheetAndDetect(
   if (!sheetRes.ok) throw new Error(`fetching sprite sheet failed (${sheetRes.status})`);
   const blob = await sheetRes.blob();
   const bitmap = await createImageBitmap(blob);
-
-  const frames = detectFrames(imageDataFor(bitmap), bitmap.width, bitmap.height, {
-    diffThreshold: 60,
-  });
-  if (frames.length === 0) {
-    bitmap.close();
-    throw new Error('No frames detected in the generated sheet');
-  }
-
-  const keys = collectReferencedSprites(character);
-  const selection = selectFrameIndices(frames, keys);
-
   return {
     sheetUrl: URL.createObjectURL(blob),
     bitmap,
     width: bitmap.width,
     height: bitmap.height,
-    frames,
-    selection,
+    bg: sampleCorner(bitmap),
   };
+}
+
+/**
+ * Fetch a retextured sheet (detect-based path), auto-segment its frames, and
+ * compute the default spriteKey→frame mapping for `character`. Returns
+ * everything the review console needs. Used by the legacy "freeform" template;
+ * fixed-grid templates use {@link fetchSheetBitmap} + sliceGridSheet instead.
+ */
+export async function fetchSheetAndDetect(
+  baseUrl: string,
+  description: string,
+  character: Character,
+  token?: string | null,
+  templateKey?: string,
+): Promise<DetectedSheet> {
+  const fetched = await fetchSheetBitmap(baseUrl, description, token, templateKey);
+  const frames = detectFrames(imageDataFor(fetched.bitmap), fetched.width, fetched.height, {
+    diffThreshold: 60,
+    bgColor: fetched.bg,
+  });
+  if (frames.length === 0) {
+    fetched.bitmap.close();
+    URL.revokeObjectURL(fetched.sheetUrl);
+    throw new Error('No frames detected in the generated sheet');
+  }
+
+  const keys = collectReferencedSprites(character);
+  const selection = selectFrameIndices(frames, keys);
+  return { ...fetched, frames, selection };
 }
 
 /**

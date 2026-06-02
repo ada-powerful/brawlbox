@@ -35,6 +35,29 @@ export function keyOutChroma(
 }
 
 /**
+ * Reduce chroma "spill": the colored halo a green/magenta backdrop leaves on
+ * anti-aliased sprite edges after {@link keyOutChroma} cuts the solid backdrop.
+ * For still-opaque pixels where the key color's dominant channel overshoots the
+ * other two, clamp that channel down to the brighter of the others. This only
+ * ever LOWERS the spill channel, so it neutralizes green/magenta fringe toward a
+ * gray edge without punching holes or shifting genuine character colors much.
+ */
+export function despillChroma(
+  rgba: Uint8ClampedArray | Uint8Array | number[],
+  color: RGB,
+): void {
+  // Which channel the backdrop is built on (g for green screen, etc.).
+  const dom = color.g >= color.r && color.g >= color.b ? 1 : color.r >= color.b ? 0 : 2;
+  const a = dom === 0 ? 1 : 0; // the two other channels
+  const b = dom === 2 ? 1 : 2;
+  for (let i = 0; i < rgba.length; i += 4) {
+    if ((rgba[i + 3] ?? 0) === 0) continue;
+    const cap = Math.max(rgba[i + a] ?? 0, rgba[i + b] ?? 0);
+    if ((rgba[i + dom] ?? 0) > cap) rgba[i + dom] = cap;
+  }
+}
+
+/**
  * Tight bounding box of the non-transparent pixels in an RGBA buffer.
  * `rgba` is row-major, 4 bytes/pixel (the shape of ImageData.data).
  * Returns null when every pixel is below the alpha threshold.

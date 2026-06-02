@@ -9,12 +9,26 @@ import { Textarea } from '@/components/ui/textarea.tsx';
 import { generateCharacter } from '@/ai/llm.ts';
 import { createOpenAIProvider } from '@/ai/openai.ts';
 import { generateCharacterViaBackend } from '@/ai/backend.ts';
-import { fetchSheetAndDetect, cropSelection, type DetectedSheet } from '@/ai/spritesBackend.ts';
+import {
+  fetchSheetAndDetect,
+  fetchSheetBitmap,
+  cropSelection,
+  type DetectedSheet,
+} from '@/ai/spritesBackend.ts';
 import { getAccessToken, login } from '@/auth/auth.ts';
 import { CHROMA, defaultBackgroundForModel, generateCharacterSprites } from '@/ai/image.ts';
 import { clearKey, getEnvKey, getKey, setKey } from '@/ai/keystore.ts';
 import { applySpritesToCharacter } from '@/creator/image/pack.ts';
 import { packSprites } from '@/creator/image/packAtlas.ts';
+import { sliceGridSheet } from '@/creator/image/sliceGrid.ts';
+import { collectReferencedSprites } from '@/runtime/atlas.ts';
+import {
+  TEMPLATES,
+  FREEFORM_ID,
+  DEFAULT_TEMPLATE_ID,
+  getTemplate,
+  type CharacterTemplate,
+} from '@/creator/templates.ts';
 import type { Character } from '@/engine/schema.ts';
 import { Playtest } from '@/creator/Playtest.tsx';
 import { Headshot } from '@/creator/Headshot.tsx';
@@ -51,6 +65,11 @@ export function CreatorPage() {
 
   const [apiKey, setApiKey] = useState('');
   const [remember, setRemember] = useState(false);
+  // Which template the new fighter is built from. A real template reuses its
+  // base character's gameplay and only re-skins the art (NB2); FREEFORM_ID keeps
+  // the legacy "AI designs a brand-new character" path.
+  const [templateId, setTemplateId] = useState<string>(DEFAULT_TEMPLATE_ID);
+  const template: CharacterTemplate | undefined = getTemplate(templateId);
   const [prompt, setPrompt] = useState(EXAMPLE);
   const [busy, setBusy] = useState(false);
   const [imgBusy, setImgBusy] = useState(false);
@@ -138,7 +157,7 @@ export function CreatorPage() {
 
   // Crop the chosen frame per pose, pack the atlas, apply it to `char`, show it
   // in the playtest, and auto-save. Shared by the initial sprite-gen and every
-  // frame re-map. The template sheet sits on black, so we key that out.
+  // frame re-map. We key out the sheet's own (auto-sampled) background color.
   const applyBackendSelection = async (
     s: DetectedSheet,
     sel: Record<string, number>,
@@ -146,8 +165,8 @@ export function CreatorPage() {
   ): Promise<void> => {
     const images = await cropSelection(s.bitmap, s.frames, sel);
     const packed = await packSprites(images, {
-      chromaKey: { r: 0, g: 0, b: 0 },
-      chromaTolerance: 90,
+      chromaKey: s.bg,
+      chromaTolerance: 110,
     });
     const sprited = applySpritesToCharacter(
       char,
@@ -171,6 +190,25 @@ export function CreatorPage() {
       .finally(() => setRepacking(false));
   };
 
+  // Template path: instantiate the chosen template's base character directly —
+  // no LLM. The fighter reuses the template's moveset; the prompt only drives
+  // the look (used later when NB2 re-skins the sprites). Strips the base atlas so
+  // it renders as a silhouette until step 2 bakes the new art in.
+  const createFromTemplate = (tpl: CharacterTemplate): void => {
+    const name = prompt.trim().slice(0, 48) || tpl.label;
+    const newChar = withUniqueId({
+      ...tpl.base,
+      spriteAtlas: undefined,
+      meta: { ...tpl.base.meta, name },
+    });
+    swapAtlasUrl(undefined); // new config => drop old sprites
+    setSheet(null); // and the old review sheet
+    setCharacter(newChar);
+    setJson(JSON.stringify(newChar, null, 2));
+    setStatus('Template ready. Now generate sprites to give it your look.');
+    void autoSave(newChar); // persist immediately so it survives sign-out
+  };
+
   const generate = async (): Promise<void> => {
     setError(null);
     setStatus(null);
@@ -178,7 +216,17 @@ export function CreatorPage() {
       setError('Describe the character you want.');
       return;
     }
-    // BYOK path needs a key up front; backend path holds the key server-side.
+    // Template-based creation needs no AI for this step — just clone the base.
+    if (template) {
+      setBusy(true);
+      try {
+        createFromTemplate(template);
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
+    // Freeform path: BYOK needs a key up front; backend holds the key server-side.
     let key: string | null = null;
     let token: string | null | undefined = null;
     if (!BACKEND_MODE) {
@@ -212,11 +260,66 @@ export function CreatorPage() {
     }
   };
 
+  // Template path: NB2 re-skins the template's green-screen layout sheet, then
+  // we slice it by the fixed grid (no auto-detect), key out the green, and bake
+  // the art onto the current character. Deterministic — no frame-review console.
+  const generateTemplateSprites = async (
+    tpl: CharacterTemplate,
+    char: Character,
+    token: string | null | undefined,
+    baseUrl: string,
+  ): Promise<void> => {
+    const fetched = await fetchSheetBitmap(baseUrl, prompt.trim(), token, tpl.backendTemplateKey);
+    try {
+      const keys = collectReferencedSprites(char);
+      const images = await sliceGridSheet(fetched.bitmap, tpl.grid, keys);
+      const packed = await packSprites(images, {
+        chromaKey: fetched.bg,
+        chromaTolerance: 110,
+        despill: true,
+      });
+      const sprited = applySpritesToCharacter(
+        char,
+        `${char.meta.id}/atlas.png`,
+        packed.frames,
+        packed.hurtboxes,
+      );
+      swapAtlasUrl(URL.createObjectURL(packed.atlasBlob));
+      setCharacter(sprited);
+      setJson(JSON.stringify(sprited, null, 2));
+      setStatus('Sprites generated. Your fighter is ready to play below.');
+      void autoSave(sprited, packed.atlasBlob);
+    } finally {
+      fetched.bitmap.close();
+      URL.revokeObjectURL(fetched.sheetUrl);
+    }
+  };
+
   const generateSprites = async (): Promise<void> => {
     if (!character) return;
     setError(null);
     setStatus(null);
-    // BYOK path needs a key; backend path retextures the template server-side.
+    // Template path always retextures server-side (NB2), so it needs a token.
+    if (template) {
+      if (!API_BASE) {
+        setError('Sprite generation needs the BrawlBox API (set VITE_API_BASE_URL).');
+        return;
+      }
+      const token = await ensureToken();
+      if (token === undefined) return; // redirecting to sign in
+      setImgBusy(true);
+      setImgProgress({ done: 0, total: 0 });
+      try {
+        await generateTemplateSprites(template, character, token, API_BASE);
+      } catch (e) {
+        setError((e as Error).message);
+      } finally {
+        setImgBusy(false);
+        setImgProgress(null);
+      }
+      return;
+    }
+    // Freeform: BYOK needs a key; backend path retextures the legacy template.
     let key: string | null = null;
     let token: string | null | undefined = null;
     if (!BACKEND_MODE) {
@@ -435,14 +538,44 @@ export function CreatorPage() {
               <CardTitle>Describe your fighter</CardTitle>
             </CardHeader>
             <CardContent className="flex flex-col gap-3">
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="template" className="text-muted-foreground">
+                  Template
+                </Label>
+                <select
+                  id="template"
+                  value={templateId}
+                  onChange={(e) => setTemplateId(e.target.value)}
+                  disabled={busy || imgBusy}
+                  className="h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-50"
+                >
+                  {TEMPLATES.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.label}
+                    </option>
+                  ))}
+                  <option value={FREEFORM_ID}>Freeform (AI-designed)</option>
+                </select>
+                {template && <p className="text-xs text-muted-foreground">{template.hint}</p>}
+              </div>
               <Textarea
                 rows={4}
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
-                placeholder={EXAMPLE}
+                placeholder={
+                  template
+                    ? 'Describe how your fighter LOOKS — e.g. a grizzled ronin in red lacquered armor'
+                    : EXAMPLE
+                }
               />
               <Button onClick={generate} disabled={busy || imgBusy}>
-                {busy ? 'Generating…' : '1 · Generate character'}
+                {busy
+                  ? template
+                    ? 'Preparing…'
+                    : 'Generating…'
+                  : template
+                    ? '1 · Use this template'
+                    : '1 · Generate character'}
               </Button>
 
               {character && (

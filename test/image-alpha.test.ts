@@ -1,5 +1,10 @@
 import { describe, expect, test } from 'vitest';
-import { alphaBoundingBox, keyOutChroma, pixelBoxToLocalAABB } from '../src/creator/image/alpha.ts';
+import {
+  alphaBoundingBox,
+  despillChroma,
+  keyOutChroma,
+  pixelBoxToLocalAABB,
+} from '../src/creator/image/alpha.ts';
 
 /** Build an RGBA buffer of `w`x`h`, opaque white inside `box`, transparent elsewhere. */
 function buffer(w: number, h: number, box: { x: number; y: number; w: number; h: number }) {
@@ -64,6 +69,30 @@ describe('keyOutChroma', () => {
     const data = new Uint8ClampedArray([0, 200, 0, 255]); // green
     keyOutChroma(data, MAGENTA, 120);
     expect(data[3]).toBe(255);
+  });
+});
+
+describe('despillChroma', () => {
+  const GREEN = { r: 0, g: 255, b: 0 };
+
+  test('clamps a green-fringe pixel down to the brighter neighbor channel', () => {
+    // White gi edge tinted green: g overshoots r,b → clamped to max(r,b).
+    const data = new Uint8ClampedArray([200, 240, 210, 255]);
+    despillChroma(data, GREEN);
+    expect(data[1]).toBe(210); // g lowered to max(r=200, b=210)
+    expect([data[0], data[2]]).toEqual([200, 210]); // r,b untouched
+  });
+
+  test('leaves a pixel whose green is already not dominant', () => {
+    const data = new Uint8ClampedArray([200, 150, 180, 255]);
+    despillChroma(data, GREEN);
+    expect([...data]).toEqual([200, 150, 180, 255]);
+  });
+
+  test('skips fully transparent pixels', () => {
+    const data = new Uint8ClampedArray([0, 255, 0, 0]);
+    despillChroma(data, GREEN);
+    expect(data[1]).toBe(255); // untouched — already keyed out
   });
 });
 
