@@ -22,6 +22,7 @@ import { applySpritesToCharacter } from '@/creator/image/pack.ts';
 import { packSprites } from '@/creator/image/packAtlas.ts';
 import { sliceSheetByDetection } from '@/creator/image/detectSlice.ts';
 import { generatePortraits, fileToDataUri, type PortraitSet } from '@/ai/portraits.ts';
+import { describeFromImage } from '@/ai/describe.ts';
 import { collectReferencedSprites } from '@/runtime/atlas.ts';
 import {
   TEMPLATES,
@@ -86,6 +87,10 @@ export function CreatorPage() {
   const [portraits, setPortraits] = useState<PortraitSet | null>(null);
   const [portraitBusy, setPortraitBusy] = useState(false);
   const [dragOver, setDragOver] = useState(false);
+  // gpt-5.5-generated appearance description (from the uploaded image + notes).
+  // When set, it drives the portrait/sprite prompts instead of the (optional,
+  // now-cleared) prompt box.
+  const [imageDescription, setImageDescription] = useState<string | null>(null);
   const [imgProgress, setImgProgress] = useState<{ done: number; total: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
@@ -202,11 +207,27 @@ export function CreatorPage() {
   };
 
   // Template path: instantiate the chosen template's base character directly —
-  // no LLM. The fighter reuses the template's moveset; the prompt only drives
-  // the look (used later when NB2 re-skins the sprites). Strips the base atlas so
-  // it renders as a silhouette until step 2 bakes the new art in.
-  const createFromTemplate = (tpl: CharacterTemplate): void => {
-    const name = prompt.trim().slice(0, 48) || tpl.label;
+  // no LLM for gameplay (the fighter reuses the template's moveset). When a
+  // reference photo is uploaded, gpt-5.5 names + describes the character from the
+  // image (+ optional notes); that description drives the look. Strips the base
+  // atlas so it renders as a silhouette until sprites are baked in.
+  const createFromTemplate = async (tpl: CharacterTemplate): Promise<void> => {
+    let name = prompt.trim().slice(0, 48) || tpl.label;
+    let described: string | null = null;
+    if (refImage && BACKEND_MODE && API_BASE) {
+      const token = await ensureToken();
+      if (token === undefined) return; // redirecting to sign in
+      setStatus('Reading your photo…');
+      try {
+        const idea = await describeFromImage(API_BASE, refImage, prompt.trim(), token);
+        if (idea.name) name = idea.name;
+        described = idea.description || null;
+      } catch (e) {
+        // Non-fatal: fall back to the template label / prompt for naming.
+        setError(`Couldn't read the photo (using defaults): ${(e as Error).message}`);
+      }
+    }
+    setImageDescription(described);
     const newChar = withUniqueId({
       ...tpl.base,
       spriteAtlas: undefined,
@@ -216,22 +237,30 @@ export function CreatorPage() {
     setSheet(null); // and the old review sheet
     setCharacter(newChar);
     setJson(JSON.stringify(newChar, null, 2));
-    setStatus('Template ready. Now generate sprites to give it your look.');
+    setStatus(
+      described
+        ? `Designed “${name}” — ${described}. Now generate portraits, then sprites.`
+        : 'Template ready. Now generate sprites to give it your look.',
+    );
     void autoSave(newChar); // persist immediately so it survives sign-out
   };
 
   const generate = async (): Promise<void> => {
     setError(null);
     setStatus(null);
-    if (!prompt.trim()) {
-      setError('Describe the character you want.');
+    // A reference photo can stand in for the text prompt (the image drives the
+    // look); otherwise a description is required.
+    if (!prompt.trim() && !(template && refImage)) {
+      setError(
+        template ? 'Describe the look, or upload a reference photo.' : 'Describe the character you want.',
+      );
       return;
     }
-    // Template-based creation needs no AI for this step — just clone the base.
+    // Template-based creation: clone the base (+ name/describe from the photo).
     if (template) {
       setBusy(true);
       try {
-        createFromTemplate(template);
+        await createFromTemplate(template);
       } finally {
         setBusy(false);
       }
@@ -282,7 +311,7 @@ export function CreatorPage() {
   ): Promise<void> => {
     const fetched = await fetchSheetBitmap(
       baseUrl,
-      prompt.trim(),
+      imageDescription ?? prompt.trim(),
       token,
       tpl.backendTemplateKey,
       portraits ? { frontUrl: portraits.front, backUrl: portraits.back } : undefined,
@@ -331,6 +360,10 @@ export function CreatorPage() {
       const dataUri = await fileToDataUri(file);
       setRefImage(dataUri);
       setPortraits(null);
+      setImageDescription(null);
+      // The photo defines the look now — clear the (optional) text prompt; the
+      // name + description are auto-generated from the image on "Use template".
+      setPrompt('');
     } catch (e) {
       setError(`Could not read that image: ${(e as Error).message}`);
     }
@@ -350,7 +383,7 @@ export function CreatorPage() {
     if (token === undefined) return; // redirecting to sign in
     setPortraitBusy(true);
     try {
-      const set = await generatePortraits(API_BASE, refImage, prompt.trim(), token);
+      const set = await generatePortraits(API_BASE, refImage, imageDescription ?? prompt.trim(), token);
       setPortraits(set);
       setStatus('Portraits ready — review them below, then generate sprites.');
     } catch (e) {
@@ -637,9 +670,11 @@ export function CreatorPage() {
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
                 placeholder={
-                  template
-                    ? 'Describe how your fighter LOOKS — e.g. a grizzled ronin in red lacquered armor'
-                    : EXAMPLE
+                  refImage
+                    ? 'Optional — add notes to steer the look; the name & description come from your photo'
+                    : template
+                      ? 'Describe how your fighter LOOKS — e.g. a grizzled ronin in red lacquered armor'
+                      : EXAMPLE
                 }
               />
               <div
