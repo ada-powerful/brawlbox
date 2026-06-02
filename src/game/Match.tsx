@@ -10,11 +10,14 @@ export function Match({
   p1,
   p2,
   unlimited = false,
+  cpuP2 = false,
 }: {
   p1: FighterSpec;
   p2: FighterSpec;
   /** Showcase mode: never time out and keep both fighters at full health. */
   unlimited?: boolean;
+  /** Drive P2 with the built-in CPU (online-first stand-in for a second human). */
+  cpuP2?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
 
@@ -32,7 +35,7 @@ export function Match({
         ? { ...p2, character: { ...p2.character, meta: { ...p2.character.meta, id: `${p2.character.meta.id}-opp` } } }
         : p2;
 
-    mountGame(mount, { p1, p2: p2Spec, unlimited })
+    mountGame(mount, { p1, p2: p2Spec, unlimited, cpuP2 })
       .then((h) => {
         if (disposed) h.destroy();
         else handle = h;
@@ -43,7 +46,7 @@ export function Match({
       disposed = true;
       handle?.destroy();
     };
-  }, [p1.character, p1.atlasUrl, p1.color, p2.character, p2.atlasUrl, p2.color, unlimited]);
+  }, [p1.character, p1.atlasUrl, p1.color, p2.character, p2.atlasUrl, p2.color, unlimited, cpuP2]);
 
   return <div ref={ref} className="overflow-hidden rounded-lg border" />;
 }

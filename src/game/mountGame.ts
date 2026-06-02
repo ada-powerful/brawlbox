@@ -7,6 +7,7 @@ import { tick } from '../engine/tick.ts';
 import { createWorld, GROUND_Y_SCREEN, STAGE_WIDTH, type World } from '../engine/world.ts';
 import { lerp } from '../engine/vec.ts';
 import { pollInputs, startKeyboard } from '../input/keyboard.ts';
+import { cpuInput } from '../runtime/ai.ts';
 import { startApp } from '../render/app.ts';
 import { DebugOverlay } from '../render/debug.ts';
 import { FighterRenderer } from '../render/fighter.ts';
@@ -39,6 +40,12 @@ export interface MountOptions {
    * the deterministic sim.
    */
   stage?: StageArt;
+  /**
+   * Drive P2 with the built-in CPU instead of keyboard/gamepad input. The
+   * stand-in opponent until online versus lands — the human plays P1, the CPU
+   * plays P2. Toggleable live via the handle's `setCpuP2`.
+   */
+  cpuP2?: boolean;
 }
 
 export interface GameHandle {
@@ -48,6 +55,8 @@ export interface GameHandle {
   setFreezeTimer: (on: boolean) => void;
   /** Pin both fighters' health full every tick so neither can be KO'd — for continuous debugging. */
   setInfiniteHealth: (on: boolean) => void;
+  /** Drive P2 with the built-in CPU (true) or with keyboard/gamepad input (false). */
+  setCpuP2: (on: boolean) => void;
   destroy: () => void;
 }
 
@@ -108,6 +117,7 @@ function updateCameraFn(camera: Container): (prev: World, curr: World, alpha: nu
 
 export async function mountGame(mount: HTMLElement, opts: MountOptions): Promise<GameHandle> {
   const { p1, p2, unlimited = false, stage } = opts;
+  let cpuP2 = opts.cpuP2 ?? false;
   for (const f of [p1, p2]) assertAtlasCoverage(f.character);
 
   // Engine character registry keyed by id. Distinct ids => both registered.
@@ -166,6 +176,12 @@ export async function mountGame(mount: HTMLElement, opts: MountOptions): Promise
     createWorld: () => createWorld(p1.character.meta.id, p2.character.meta.id),
     pollInputs,
     tick: (w, inp) => {
+      // P2 driven by the CPU: replace its polled buttons with the AI's decision
+      // for this tick (P1 stays human). Done here, outside the pure tick, so the
+      // engine still just consumes an Inputs struct.
+      if (cpuP2) {
+        inp = { players: [inp.players[0] ?? { buttons: 0 }, { buttons: cpuInput(w, characters, 1) }] };
+      }
       const before = w.roundTime;
       // Snapshot life before the tick so showcase mode can pin it back, keeping
       // both bars full (they start full, so restoring each tick = infinite HP).
@@ -214,6 +230,9 @@ export async function mountGame(mount: HTMLElement, opts: MountOptions): Promise
     },
     setInfiniteHealth: (on: boolean) => {
       infiniteHealth = on;
+    },
+    setCpuP2: (on: boolean) => {
+      cpuP2 = on;
     },
     destroy: () => {
       handle.stop();

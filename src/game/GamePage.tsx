@@ -74,7 +74,8 @@ export function GamePage() {
           </div>
         </CardHeader>
         <CardContent>
-          <Match p1={p1} p2={p2} />
+          {/* Online versus isn't built yet: the human plays P1, the CPU plays P2. */}
+          <Match p1={p1} p2={p2} cpuP2 />
         </CardContent>
       </Card>
     );

@@ -276,11 +276,13 @@ function buildStates(anims: Record<string, Animation>): Record<string, unknown> 
     crouchpunchHeavy: atk('crouchpunch', 1, 'crouch', { type: 'C', physics: 'S', hd: { damage: { hit: 72, guard: 10 } }, ret: dur('crouchpunch') + 8 }),
     crouchlk: atk('crouchlk', 1, 'crouch', { type: 'C', physics: 'S' }),
     crouchhk: atk('crouchhk', 2, 'crouch', { type: 'C', physics: 'S', hd: { damage: { hit: 70, guard: 10 } } }),
-    jumppunch: atk('jumppunch', 1, 'stand', { type: 'A', physics: 'A', land: true }),
+    // Jump attacks are OVERHEADS (guardFlag 'H'): they come from above, so a
+    // crouch-block can't stop them — the defender must stand-block (or eat it).
+    jumppunch: atk('jumppunch', 1, 'stand', { type: 'A', physics: 'A', land: true, hd: { guardFlag: 'H' } }),
     // Jump LK shares the jump-HK animation (its own art had poor reach); they
     // differ only in power — light = less damage, heavy = more.
-    jumplk: atk('jumphk', 1, 'stand', { type: 'A', physics: 'A', land: true, hd: { damage: { hit: 35, guard: 4 } } }),
-    jumphk: atk('jumphk', 1, 'stand', { type: 'A', physics: 'A', land: true, hd: { damage: { hit: 65, guard: 9 } } }),
+    jumplk: atk('jumphk', 1, 'stand', { type: 'A', physics: 'A', land: true, hd: { guardFlag: 'H', damage: { hit: 35, guard: 4 } } }),
+    jumphk: atk('jumphk', 1, 'stand', { type: 'A', physics: 'A', land: true, hd: { guardFlag: 'H', damage: { hit: 65, guard: 9 } } }),
 
     // --- LP+HP two-button specials ---
     punch2h: atk('punch2h', 2, 'stand', { hd: { damage: { hit: 70, guard: 10 }, groundVelocity: { x: 5, y: 0 }, pauseTime: { p1: 12, p2: 12 } } }),

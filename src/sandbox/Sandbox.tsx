@@ -62,6 +62,10 @@ export function Sandbox() {
   const [mode, setMode] = useState<Mode>('match');
   const [freezeTimer, setFreezeTimer] = useState(false);
   const [infiniteHealth, setInfiniteHealth] = useState(false);
+  // Online-first: the human drives P1 and the CPU drives P2 by default (local
+  // 2-player keyboard isn't a supported control path). Flip to Human to manually
+  // test P2's own moves.
+  const [cpuP2, setCpuP2] = useState(true);
   const [status, setStatus] = useState('Baking sheet character…');
   const [error, setError] = useState<string | null>(null);
 
@@ -121,6 +125,7 @@ export function Sandbox() {
         p1: { character: p1.character, atlasUrl: p1.atlasUrl, color: P1_COLOR },
         p2: { character: p2.character, atlasUrl: p2.atlasUrl, color: P2_COLOR },
         stage: hillsideStage,
+        cpuP2,
       })
         .then((h) => {
           if (disposed) h.destroy();
@@ -128,6 +133,7 @@ export function Sandbox() {
             handleRef.current = h;
             h.setFreezeTimer(freezeTimer);
             h.setInfiniteHealth(infiniteHealth);
+            h.setCpuP2(cpuP2);
           }
         })
         .catch((e) => setError(`Mount failed: ${(e as Error).message}`));
@@ -149,13 +155,15 @@ export function Sandbox() {
     if (mode !== 'match') return;
     handleRef.current?.setFreezeTimer(freezeTimer);
     handleRef.current?.setInfiniteHealth(infiniteHealth);
+    handleRef.current?.setCpuP2(cpuP2);
     const onKey = (e: KeyboardEvent): void => {
       if (e.code === 'KeyT') setFreezeTimer((v) => !v);
       else if (e.code === 'KeyH') setInfiniteHealth((v) => !v);
+      else if (e.code === 'KeyC') setCpuP2((v) => !v);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [freezeTimer, infiniteHealth, mode]);
+  }, [freezeTimer, infiniteHealth, cpuP2, mode]);
 
   // Gallery keyboard controls: ←/→ step, space play/pause.
   useEffect(() => {
@@ -261,6 +269,19 @@ export function Sandbox() {
               }}
             >
               {infiniteHealth ? 'HP infinite (H)' : 'Infinite HP (H)'}
+            </button>
+            <button
+              onClick={() => setCpuP2((v) => !v)}
+              style={{
+                padding: '4px 10px',
+                borderRadius: 6,
+                background: cpuP2 ? '#2e3a4e' : '#26262e',
+                color: '#eee',
+                border: `1px solid ${cpuP2 ? '#4a5a7a' : '#333'}`,
+                cursor: 'pointer',
+              }}
+            >
+              {cpuP2 ? 'P2: CPU (C)' : 'P2: Human (C)'}
             </button>
           </>
         ) : (
