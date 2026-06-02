@@ -279,6 +279,7 @@ export function CreatorPage() {
         chromaKey: tpl.bg,
         chromaTolerance: 110,
         despill: true,
+        robustScale: true,
       });
       const sprited = applySpritesToCharacter(
         char,

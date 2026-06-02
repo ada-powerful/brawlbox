@@ -24,6 +24,9 @@ export interface PackOptions {
   chromaTolerance?: number;
   /** Also neutralize the key colors' anti-alias spill on sprite edges. */
   despill?: boolean;
+  /** Size the shared scale off a high percentile (not the max) so one oversized
+   * crop can't shrink every sprite; outliers are clamped to fit per-frame. */
+  robustScale?: boolean;
 }
 
 export interface PackedAtlas {
@@ -86,23 +89,33 @@ export async function packSprites(
   // character balloon and shrink frame to frame. A single scale keeps the
   // tallest/widest frame filling the cell and every other pose proportional.
   const bitmaps: Record<string, ImageBitmap> = {};
-  let maxW = 1;
-  let maxH = 1;
-  for (const key of keys) {
-    const bitmap = await createImageBitmap(images[key]!);
-    bitmaps[key] = bitmap;
-    if (bitmap.width > maxW) maxW = bitmap.width;
-    if (bitmap.height > maxH) maxH = bitmap.height;
-  }
-  const scale = Math.min(cellW / maxW, cellH / maxH);
+  for (const key of keys) bitmaps[key] = await createImageBitmap(images[key]!);
+
+  // Reference size for the shared scale. Normally the max frame, so the biggest
+  // pose fills the cell and the rest stay proportional. But a single bad crop
+  // (e.g. detection merged two poses into one over-wide frame) would then shrink
+  // EVERY sprite. `robustScale` instead references a high percentile, so a few
+  // outliers don't dominate — they're clamped to fit per-frame below.
+  const pct = (vals: number[], p: number): number => {
+    const s = [...vals].sort((a, b) => a - b);
+    return s[Math.min(s.length - 1, Math.floor(p * (s.length - 1)))] ?? 1;
+  };
+  const ws = keys.map((k) => bitmaps[k]!.width);
+  const hs = keys.map((k) => bitmaps[k]!.height);
+  const p = options.robustScale ? 0.9 : 1;
+  const refW = Math.max(1, pct(ws, p));
+  const refH = Math.max(1, pct(hs, p));
+  const scale = Math.min(cellW / refW, cellH / refH);
 
   for (const key of keys) {
     const rect = layout.frames[key]!;
     const bitmap = bitmaps[key]!;
-    // Draw at the shared scale, anchored to the cell's bottom-center so the
-    // character's feet line up with the (0.5, 1) sprite anchor.
-    const dw = bitmap.width * scale;
-    const dh = bitmap.height * scale;
+    // Shared scale, but never let an oversized frame overflow its cell (clamps
+    // only the outliers; for the normal range this equals `scale`). Anchored to
+    // the cell's bottom-center so the character's feet line up with (0.5, 1).
+    const ds = Math.min(scale, cellW / bitmap.width, cellH / bitmap.height);
+    const dw = bitmap.width * ds;
+    const dh = bitmap.height * ds;
     ctx.drawImage(bitmap, rect.x + (cellW - dw) / 2, rect.y + (cellH - dh), dw, dh);
     bitmap.close();
 
