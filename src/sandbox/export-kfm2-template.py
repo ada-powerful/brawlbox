@@ -33,17 +33,15 @@ OUT_JSON = os.path.join(HERE, "kfm2-template.json")
 # ~4K: pin the width to the canonical 4K width, preserve the grid's aspect.
 TARGET_W = 3840
 
-# Green-screen background + magenta cell grid. The template's ONLY purpose is to
-# feed NB2 (nano-banana-2) as the layout reference for a re-skin. A flat
-# chroma-green backdrop both (a) helps the image model separate each pose from the
-# background and (b) lets the slicer key it out by auto-sampling it. The magenta
-# grid lines give NB2 explicit cell borders so it keeps every pose boxed in its
-# cell (without them NB2 drifts poses across boundaries → the slicer cuts slivers).
-# Both colors are chroma-keyed out by the frontend, so the FINAL sprites carry no
-# background and no border — green and magenta never appear on the character.
-# (Green/magenta is the classic keyable pair; both are rare in real characters.)
+# Flat chroma-green background, NO grid lines. The template feeds NB2
+# (nano-banana-2) as the layout reference for a re-skin; a uniform green field
+# (a) lets the image model separate each pose cleanly and (b) lets the frontend
+# segment the poses by their green gaps. We tried magenta cell-grid lines to pin
+# the layout, but NB2 erases them (and their faint remnants form lines that break
+# gap-detection), so the slicer instead DETECTS poses by the green gaps and maps
+# them to cells by row/column order — robust to NB2's variable output size/aspect.
 BG = (0, 255, 0, 255)
-DRAW_GRID = True
+DRAW_GRID = False
 GRID = (255, 0, 255, 255)
 GRID_EDGE = (255, 0, 255, 255)
 GRID_WIDTH = 6

@@ -20,7 +20,7 @@ import { CHROMA, defaultBackgroundForModel, generateCharacterSprites } from '@/a
 import { clearKey, getEnvKey, getKey, setKey } from '@/ai/keystore.ts';
 import { applySpritesToCharacter } from '@/creator/image/pack.ts';
 import { packSprites } from '@/creator/image/packAtlas.ts';
-import { sliceGridSheet } from '@/creator/image/sliceGrid.ts';
+import { sliceSheetByDetection } from '@/creator/image/detectSlice.ts';
 import { collectReferencedSprites } from '@/runtime/atlas.ts';
 import {
   TEMPLATES,
@@ -272,12 +272,11 @@ export function CreatorPage() {
     const fetched = await fetchSheetBitmap(baseUrl, prompt.trim(), token, tpl.backendTemplateKey);
     try {
       const keys = collectReferencedSprites(char);
-      // Template bg/grid colors are known (green screen + magenta grid). Don't
-      // auto-sample — the sheet's corner pixel is a magenta border, not the bg.
-      const images = await sliceGridSheet(fetched.bitmap, tpl.grid, keys, tpl.bg, tpl.gridLine);
+      // Detect poses by their green gaps (robust to NB2's variable output size/
+      // aspect) and map them to keys by the template's known grid structure.
+      const images = await sliceSheetByDetection(fetched.bitmap, tpl.grid, keys, tpl.bg);
       const packed = await packSprites(images, {
         chromaKey: tpl.bg,
-        extraChroma: [tpl.gridLine],
         chromaTolerance: 110,
         despill: true,
       });

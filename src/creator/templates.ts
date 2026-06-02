@@ -31,12 +31,10 @@ export interface CharacterTemplate {
   backendTemplateKey: string;
   /** Base character whose state machine / anims / timings the fighter reuses. */
   base: Character;
-  /** Fixed-grid slicing spec for the retextured green sheet. */
+  /** Grid structure (rows/cols + cell map) used to map detected poses to keys. */
   grid: GridTemplateSpec;
   /** Background color to key out of the retextured sheet (the green screen). */
   bg: RGB;
-  /** Cell-grid line color drawn on the template; keyed out so no border remains. */
-  gridLine: RGB;
 }
 
 /** Reverse kfm2-template.json's "col,row"→key map into key→{col,row}. */
@@ -59,7 +57,6 @@ export const TEMPLATES: CharacterTemplate[] = [
     base: KFM2_CHARACTER,
     grid: kfm2GridSpec(),
     bg: { r: 0, g: 255, b: 0 }, // chroma-green screen
-    gridLine: { r: 255, g: 0, b: 255 }, // magenta cell borders
   },
 ];
 
