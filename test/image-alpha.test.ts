@@ -2,7 +2,9 @@ import { describe, expect, test } from 'vitest';
 import {
   alphaBoundingBox,
   despillChroma,
+  isGreenScreen,
   keyOutChroma,
+  keyOutGreenScreen,
   pixelBoxToLocalAABB,
 } from '../src/creator/image/alpha.ts';
 
@@ -18,6 +20,34 @@ function buffer(w: number, h: number, box: { x: number; y: number; w: number; h:
   }
   return data;
 }
+
+describe('isGreenScreen', () => {
+  // Real colours sampled from a generated sheet whose backdrop drifted olive.
+  test('treats both clean chroma-green and olive/muddy spill as backdrop', () => {
+    expect(isGreenScreen(14, 233, 14)).toBe(true); // clean chroma green
+    expect(isGreenScreen(96, 168, 48)).toBe(true); // olive spill
+    expect(isGreenScreen(96, 144, 48)).toBe(true); // darker olive spill
+  });
+
+  test('keeps character colours (skin, denim, white, dark outline)', () => {
+    expect(isGreenScreen(210, 170, 130)).toBe(false); // skin
+    expect(isGreenScreen(48, 96, 120)).toBe(false); // blue denim
+    expect(isGreenScreen(240, 240, 240)).toBe(false); // white
+    expect(isGreenScreen(24, 24, 24)).toBe(false); // dark outline (below floor)
+  });
+});
+
+describe('keyOutGreenScreen', () => {
+  test('clears green-dominant pixels and leaves the character opaque', () => {
+    const data = new Uint8ClampedArray([
+      96, 168, 48, 255, // olive backdrop
+      210, 170, 130, 255, // skin
+    ]);
+    keyOutGreenScreen(data);
+    expect(data[3]).toBe(0); // backdrop cut out
+    expect(data[7]).toBe(255); // character kept
+  });
+});
 
 describe('alphaBoundingBox', () => {
   test('finds the tight box of opaque pixels', () => {

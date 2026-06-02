@@ -35,6 +35,37 @@ export function keyOutChroma(
 }
 
 /**
+ * True when green clearly dominates red and blue — a chroma-green-screen pixel.
+ * Unlike a fixed-color match, this also catches the muddy/olive shades NB2/fal
+ * sometimes bleed into the backdrop (e.g. a smeared region of one generated
+ * sheet), which a near-pure-green key misses and then bakes into the atlas as an
+ * olive rectangle. `margin` = how much greener than the next-highest channel a
+ * pixel must be; `floor` ignores near-black so dark outlines aren't eaten.
+ * Character colours (skin, blue denim, white, etc.) are never green-dominant;
+ * green is reserved for the backdrop on these templates, so this is safe.
+ */
+export function isGreenScreen(r: number, g: number, b: number, margin = 48, floor = 64): boolean {
+  return g >= floor && g - Math.max(r, b) >= margin;
+}
+
+/**
+ * Make green-screen pixels (per {@link isGreenScreen}) transparent, in place.
+ * Complements {@link keyOutChroma} for green backdrops: the fixed key removes the
+ * clean fill; this also clears the olive/muddy spill that drifts out of tolerance.
+ */
+export function keyOutGreenScreen(
+  rgba: Uint8ClampedArray | Uint8Array | number[],
+  margin = 48,
+  floor = 64,
+): void {
+  for (let i = 0; i < rgba.length; i += 4) {
+    if (isGreenScreen(rgba[i] ?? 0, rgba[i + 1] ?? 0, rgba[i + 2] ?? 0, margin, floor)) {
+      rgba[i + 3] = 0;
+    }
+  }
+}
+
+/**
  * Reduce chroma "spill": the colored halo a green/magenta backdrop (or grid)
  * leaves on anti-aliased sprite edges after {@link keyOutChroma} cuts the solid
  * fill. The key color's "high" channels (≥128 — green for green-screen; red+blue

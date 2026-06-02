@@ -5,7 +5,9 @@ import type { AABB, FrameRect } from '../../engine/schema.ts';
 import {
   alphaBoundingBox,
   despillChroma,
+  isGreenScreen,
   keyOutChroma,
+  keyOutGreenScreen,
   pixelBoxToLocalAABB,
   type RGB,
 } from './alpha.ts';
@@ -135,6 +137,11 @@ export async function packSprites(
       const tol = options.chromaTolerance ?? 120;
       const colors = [options.chromaKey, ...(options.extraChroma ?? [])];
       for (const c of colors) keyOutChroma(cell.data, c, tol);
+      // A green backdrop also bleeds olive/muddy spill the fixed key misses;
+      // clear every green-dominant pixel so it isn't baked into the frame.
+      if (isGreenScreen(options.chromaKey.r, options.chromaKey.g, options.chromaKey.b)) {
+        keyOutGreenScreen(cell.data);
+      }
       if (options.despill) for (const c of colors) despillChroma(cell.data, c);
       ctx.putImageData(cell, rect.x, rect.y); // bake the cutout into the atlas
     }

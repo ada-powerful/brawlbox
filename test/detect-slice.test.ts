@@ -1,5 +1,16 @@
 import { describe, expect, test } from 'vitest';
-import { segmentByExpected, segmentByGaps } from '../src/creator/image/detectSlice.ts';
+import { dominantBox, segmentByExpected, segmentByGaps } from '../src/creator/image/detectSlice.ts';
+
+// Build a row-major content mask from an ASCII grid ('#' = pose pixel).
+function mask(rows: string[]): { mask: Uint8Array; w: number; h: number } {
+  const h = rows.length;
+  const w = rows[0]!.length;
+  const m = new Uint8Array(w * h);
+  rows.forEach((row, y) => {
+    for (let x = 0; x < w; x++) if (row[x] === '#') m[y * w + x] = 1;
+  });
+  return { mask: m, w, h };
+}
 
 // A 1-D content profile: high inside poses, ~0 in the green gaps between them.
 describe('segmentByGaps', () => {
@@ -62,5 +73,49 @@ describe('segmentByExpected', () => {
   test('never lumps two poses into one segment (count is exact)', () => {
     const p = [0, 9, 9, 0, 9, 9, 0, 9, 9, 0];
     expect(segmentByExpected(p, 3).length).toBe(3);
+  });
+});
+
+describe('dominantBox', () => {
+  test('returns the tight box of a single blob', () => {
+    const { mask: m, w, h } = mask([
+      '......',
+      '.##...',
+      '.##...',
+      '......',
+    ]);
+    expect(dominantBox(m, w, h, 2)).toEqual({ x: 1, y: 1, w: 2, h: 2 });
+  });
+
+  test('drops a neighbouring pose that bled into the segment (the KO/faint bug)', () => {
+    // A wide lying figure on the left, plus a sliver of the next pose that bled
+    // in past a real gap on the right. A plain AABB would span both (w=11);
+    // dominantBox keeps only the dominant figure.
+    const { mask: m, w, h } = mask([
+      '...........',
+      '#####....#.',
+      '#####....#.',
+      '#####......',
+      '...........',
+    ]);
+    const box = dominantBox(m, w, h, 2);
+    expect(box).toEqual({ x: 0, y: 1, w: 5, h: 3 });
+  });
+
+  test('merges a figure split into nearby components (a limb a few px away)', () => {
+    // Body + a detached limb one column away (gap of 1) → one figure.
+    const { mask: m, w, h } = mask([
+      '........',
+      '.###.#..',
+      '.###.#..',
+      '........',
+    ]);
+    const box = dominantBox(m, w, h, 2);
+    expect(box).toEqual({ x: 1, y: 1, w: 5, h: 2 });
+  });
+
+  test('returns null for an empty mask', () => {
+    const { mask: m, w, h } = mask(['...', '...']);
+    expect(dominantBox(m, w, h, 2)).toBeNull();
   });
 });
