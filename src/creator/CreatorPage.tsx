@@ -272,7 +272,7 @@ export function CreatorPage() {
     const fetched = await fetchSheetBitmap(baseUrl, prompt.trim(), token, tpl.backendTemplateKey);
     try {
       const keys = collectReferencedSprites(char);
-      const images = await sliceGridSheet(fetched.bitmap, tpl.grid, keys);
+      const images = await sliceGridSheet(fetched.bitmap, tpl.grid, keys, fetched.bg);
       const packed = await packSprites(images, {
         chromaKey: fetched.bg,
         chromaTolerance: 110,
