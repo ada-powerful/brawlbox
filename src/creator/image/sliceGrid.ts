@@ -79,12 +79,13 @@ function contentBox(
   ctx: OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D,
   bitmap: ImageBitmap,
   cell: PixelBox,
-  bg: RGB,
+  keyColors: RGB[],
 ): PixelBox | null {
   ctx.clearRect(0, 0, cell.w, cell.h);
   ctx.drawImage(bitmap, cell.x, cell.y, cell.w, cell.h, 0, 0, cell.w, cell.h);
   const img = ctx.getImageData(0, 0, cell.w, cell.h);
-  keyOutChroma(img.data, bg, 110); // background → alpha 0
+  // Drop the background AND the grid lines so the box bounds only the pose.
+  for (const c of keyColors) keyOutChroma(img.data, c, 110);
   const bb = alphaBoundingBox(img.data, cell.w, cell.h, 16);
   if (!bb) return null;
   // A couple px of slack so anti-aliased edges aren't shaved.
@@ -109,18 +110,20 @@ export async function sliceGridSheet(
   spec: GridTemplateSpec,
   keys: string[],
   bg: RGB,
+  gridLine?: RGB,
 ): Promise<Record<string, Blob>> {
   const cellW = Math.ceil(bitmap.width / spec.cols);
   const cellH = Math.ceil(bitmap.height / spec.rows);
   const probe = makeCanvas(cellW, cellH);
   const probeCtx = ctx2d(probe);
+  const keyColors = gridLine ? [bg, gridLine] : [bg];
 
   const out: Record<string, Blob> = {};
   for (const key of keys) {
     const c = spec.cells[key];
     if (!c) continue;
     const cell = cellBox(bitmap, spec, c.col, c.row);
-    const box = contentBox(probeCtx, bitmap, cell, bg) ?? cell;
+    const box = contentBox(probeCtx, bitmap, cell, keyColors) ?? cell;
     out[key] = await cropToBlob(bitmap, box);
   }
   return out;

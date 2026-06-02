@@ -35,25 +35,28 @@ export function keyOutChroma(
 }
 
 /**
- * Reduce chroma "spill": the colored halo a green/magenta backdrop leaves on
- * anti-aliased sprite edges after {@link keyOutChroma} cuts the solid backdrop.
- * For still-opaque pixels where the key color's dominant channel overshoots the
- * other two, clamp that channel down to the brighter of the others. This only
- * ever LOWERS the spill channel, so it neutralizes green/magenta fringe toward a
- * gray edge without punching holes or shifting genuine character colors much.
+ * Reduce chroma "spill": the colored halo a green/magenta backdrop (or grid)
+ * leaves on anti-aliased sprite edges after {@link keyOutChroma} cuts the solid
+ * fill. The key color's "high" channels (≥128 — green for green-screen; red+blue
+ * for magenta) are clamped down to the brightest of its low channels, for
+ * still-opaque pixels only. This only ever LOWERS those channels, so it
+ * neutralizes the fringe toward a neutral edge without punching holes or shifting
+ * genuine character colors much. No-op for keys with no low channel (e.g. white).
  */
 export function despillChroma(
   rgba: Uint8ClampedArray | Uint8Array | number[],
   color: RGB,
 ): void {
-  // Which channel the backdrop is built on (g for green screen, etc.).
-  const dom = color.g >= color.r && color.g >= color.b ? 1 : color.r >= color.b ? 0 : 2;
-  const a = dom === 0 ? 1 : 0; // the two other channels
-  const b = dom === 2 ? 1 : 2;
+  const ch = [color.r, color.g, color.b];
+  const spill: number[] = [];
+  const keep: number[] = [];
+  for (let k = 0; k < 3; k++) (ch[k]! >= 128 ? spill : keep).push(k);
+  if (spill.length === 0 || keep.length === 0) return;
   for (let i = 0; i < rgba.length; i += 4) {
     if ((rgba[i + 3] ?? 0) === 0) continue;
-    const cap = Math.max(rgba[i + a] ?? 0, rgba[i + b] ?? 0);
-    if ((rgba[i + dom] ?? 0) > cap) rgba[i + dom] = cap;
+    let cap = 0;
+    for (const k of keep) cap = Math.max(cap, rgba[i + k] ?? 0);
+    for (const k of spill) if ((rgba[i + k] ?? 0) > cap) rgba[i + k] = cap;
   }
 }
 

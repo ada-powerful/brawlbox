@@ -33,18 +33,20 @@ OUT_JSON = os.path.join(HERE, "kfm2-template.json")
 # ~4K: pin the width to the canonical 4K width, preserve the grid's aspect.
 TARGET_W = 3840
 
-# Green-screen background. The template's ONLY purpose is to be fed to NB2
-# (nano-banana-2) as the layout reference for a re-skin: a flat chroma-green
-# backdrop both (a) helps the image model cleanly separate each pose from the
-# background (its training distribution is full of green screen) and (b) lets the
-# frontend slicer key the background out by auto-sampling it. We deliberately do
-# NOT draw grid lines anymore: a uniform green field keys out cleanly, and the
-# poses' fixed positions already encode the cell layout the slicer divides back
-# out (grid cols/rows live in the companion JSON, not burned into the image).
+# Green-screen background + magenta cell grid. The template's ONLY purpose is to
+# feed NB2 (nano-banana-2) as the layout reference for a re-skin. A flat
+# chroma-green backdrop both (a) helps the image model separate each pose from the
+# background and (b) lets the slicer key it out by auto-sampling it. The magenta
+# grid lines give NB2 explicit cell borders so it keeps every pose boxed in its
+# cell (without them NB2 drifts poses across boundaries → the slicer cuts slivers).
+# Both colors are chroma-keyed out by the frontend, so the FINAL sprites carry no
+# background and no border — green and magenta never appear on the character.
+# (Green/magenta is the classic keyable pair; both are rare in real characters.)
 BG = (0, 255, 0, 255)
-DRAW_GRID = False
-GRID = (58, 63, 77, 255)
-GRID_EDGE = (90, 96, 112, 255)
+DRAW_GRID = True
+GRID = (255, 0, 255, 255)
+GRID_EDGE = (255, 0, 255, 255)
+GRID_WIDTH = 6
 
 
 def main() -> None:
@@ -71,14 +73,14 @@ def main() -> None:
 
     draw = ImageDraw.Draw(canvas)
 
-    # 2) Grid lines (opt-in; off for the green-screen template — see BG note).
+    # 2) Magenta cell grid — keyable borders that keep NB2's poses boxed.
     if DRAW_GRID:
         for c in range(cols + 1):
             x = round(c * tcw)
-            draw.line([(x, 0), (x, out_h)], fill=GRID_EDGE if c in (0, cols) else GRID, width=2)
+            draw.line([(x, 0), (x, out_h)], fill=GRID_EDGE if c in (0, cols) else GRID, width=GRID_WIDTH)
         for r in range(rows + 1):
             y = round(r * tch)
-            draw.line([(0, y), (out_w, y)], fill=GRID_EDGE if r in (0, rows) else GRID, width=2)
+            draw.line([(0, y), (out_w, y)], fill=GRID_EDGE if r in (0, rows) else GRID, width=GRID_WIDTH)
 
     # 3) Build the code->cell map for the companion JSON. No text is drawn on
     #    the image -- the per-frame boundary boxes (the grid above) are the only

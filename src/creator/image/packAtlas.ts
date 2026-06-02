@@ -19,8 +19,10 @@ export interface PackOptions {
   alphaThreshold?: number;
   /** When set, key out this background color (for non-transparent models). */
   chromaKey?: RGB;
+  /** Extra colors to key out too (e.g. a magenta cell grid alongside green bg). */
+  extraChroma?: RGB[];
   chromaTolerance?: number;
-  /** Also neutralize the key color's anti-alias spill on sprite edges. */
+  /** Also neutralize the key colors' anti-alias spill on sprite edges. */
   despill?: boolean;
 }
 
@@ -106,8 +108,10 @@ export async function packSprites(
 
     const cell = ctx.getImageData(rect.x, rect.y, cellW, cellH);
     if (options.chromaKey) {
-      keyOutChroma(cell.data, options.chromaKey, options.chromaTolerance ?? 120);
-      if (options.despill) despillChroma(cell.data, options.chromaKey);
+      const tol = options.chromaTolerance ?? 120;
+      const colors = [options.chromaKey, ...(options.extraChroma ?? [])];
+      for (const c of colors) keyOutChroma(cell.data, c, tol);
+      if (options.despill) for (const c of colors) despillChroma(cell.data, c);
       ctx.putImageData(cell, rect.x, rect.y); // bake the cutout into the atlas
     }
 

@@ -13,6 +13,7 @@ import type { Character } from '@/engine/schema.ts';
 import { KFM2_CHARACTER } from '@/sandbox/kfm2.ts';
 import kfm2TemplateRaw from '@/sandbox/kfm2-template.json' with { type: 'json' };
 import type { GridTemplateSpec } from '@/creator/image/sliceGrid.ts';
+import type { RGB } from '@/creator/image/alpha.ts';
 
 interface Kfm2TemplateJson {
   grid: { cols: number; rows: number };
@@ -32,6 +33,10 @@ export interface CharacterTemplate {
   base: Character;
   /** Fixed-grid slicing spec for the retextured green sheet. */
   grid: GridTemplateSpec;
+  /** Background color to key out of the retextured sheet (the green screen). */
+  bg: RGB;
+  /** Cell-grid line color drawn on the template; keyed out so no border remains. */
+  gridLine: RGB;
 }
 
 /** Reverse kfm2-template.json's "col,row"→key map into key→{col,row}. */
@@ -53,6 +58,8 @@ export const TEMPLATES: CharacterTemplate[] = [
     backendTemplateKey: 'templates/kfm2.png',
     base: KFM2_CHARACTER,
     grid: kfm2GridSpec(),
+    bg: { r: 0, g: 255, b: 0 }, // chroma-green screen
+    gridLine: { r: 255, g: 0, b: 255 }, // magenta cell borders
   },
 ];
 

@@ -272,9 +272,12 @@ export function CreatorPage() {
     const fetched = await fetchSheetBitmap(baseUrl, prompt.trim(), token, tpl.backendTemplateKey);
     try {
       const keys = collectReferencedSprites(char);
-      const images = await sliceGridSheet(fetched.bitmap, tpl.grid, keys, fetched.bg);
+      // Template bg/grid colors are known (green screen + magenta grid). Don't
+      // auto-sample — the sheet's corner pixel is a magenta border, not the bg.
+      const images = await sliceGridSheet(fetched.bitmap, tpl.grid, keys, tpl.bg, tpl.gridLine);
       const packed = await packSprites(images, {
-        chromaKey: fetched.bg,
+        chromaKey: tpl.bg,
+        extraChroma: [tpl.gridLine],
         chromaTolerance: 110,
         despill: true,
       });

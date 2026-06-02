@@ -94,6 +94,14 @@ describe('despillChroma', () => {
     despillChroma(data, GREEN);
     expect(data[1]).toBe(255); // untouched — already keyed out
   });
+
+  test('magenta key clamps BOTH high channels to the low one', () => {
+    const MAGENTA = { r: 255, g: 0, b: 255 };
+    // A pinkish edge tinted by a magenta grid: r,b overshoot g → both clamped to g.
+    const data = new Uint8ClampedArray([230, 90, 240, 255]);
+    despillChroma(data, MAGENTA);
+    expect([data[0], data[1], data[2]]).toEqual([90, 90, 90]); // neutralized
+  });
 });
 
 describe('pixelBoxToLocalAABB', () => {
