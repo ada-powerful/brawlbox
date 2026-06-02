@@ -85,6 +85,7 @@ export function CreatorPage() {
   const [refImage, setRefImage] = useState<string | null>(null);
   const [portraits, setPortraits] = useState<PortraitSet | null>(null);
   const [portraitBusy, setPortraitBusy] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
   const [imgProgress, setImgProgress] = useState<{ done: number; total: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
@@ -641,7 +642,26 @@ export function CreatorPage() {
                     : EXAMPLE
                 }
               />
-              <div className="flex flex-col gap-1.5">
+              <div
+                className={`flex flex-col gap-1.5 rounded-md border border-dashed p-3 transition-colors ${
+                  dragOver ? 'border-primary bg-secondary/40' : 'border-input'
+                }`}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  if (!busy && !imgBusy && !portraitBusy) setDragOver(true);
+                }}
+                onDragLeave={() => setDragOver(false)}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setDragOver(false);
+                  if (busy || imgBusy || portraitBusy) return;
+                  const file = Array.from(e.dataTransfer.files).find((f) =>
+                    f.type.startsWith('image/'),
+                  );
+                  if (file) void onPickImage(file);
+                  else setError('Drop an image file (PNG/JPG).');
+                }}
+              >
                 <Label htmlFor="refimg" className="text-muted-foreground">
                   Reference photo (optional)
                 </Label>
@@ -654,8 +674,8 @@ export function CreatorPage() {
                   className="text-xs text-muted-foreground file:mr-2 file:rounded-md file:border-0 file:bg-secondary file:px-3 file:py-1 file:text-sm"
                 />
                 <p className="text-xs text-muted-foreground">
-                  Upload a face or full-body photo — we generate matching front/back/headshot art and
-                  use it to skin your fighter.
+                  Drag &amp; drop or choose a face or full-body photo — we generate matching
+                  front/back/headshot art and use it to skin your fighter.
                 </p>
                 {refImage && (
                   <img
