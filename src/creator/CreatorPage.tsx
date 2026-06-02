@@ -21,6 +21,7 @@ import { clearKey, getEnvKey, getKey, setKey } from '@/ai/keystore.ts';
 import { applySpritesToCharacter } from '@/creator/image/pack.ts';
 import { packSprites } from '@/creator/image/packAtlas.ts';
 import { sliceSheetByDetection } from '@/creator/image/detectSlice.ts';
+import { generatePortraits, fileToDataUri, type PortraitSet } from '@/ai/portraits.ts';
 import { collectReferencedSprites } from '@/runtime/atlas.ts';
 import {
   TEMPLATES,
@@ -78,6 +79,12 @@ export function CreatorPage() {
   // until done); other fighters are locked from loading too, to avoid swapping
   // the working character mid-bake.
   const [generatingId, setGeneratingId] = useState<string | null>(null);
+  // Optional uploaded reference photo (data URI) + the NB2 portrait set generated
+  // from it. front+back feed the action sheet so every pose stays on-model; the
+  // headshot is shown for later in-game use. All three render in the create view.
+  const [refImage, setRefImage] = useState<string | null>(null);
+  const [portraits, setPortraits] = useState<PortraitSet | null>(null);
+  const [portraitBusy, setPortraitBusy] = useState(false);
   const [imgProgress, setImgProgress] = useState<{ done: number; total: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
@@ -272,7 +279,13 @@ export function CreatorPage() {
     token: string | null | undefined,
     baseUrl: string,
   ): Promise<void> => {
-    const fetched = await fetchSheetBitmap(baseUrl, prompt.trim(), token, tpl.backendTemplateKey);
+    const fetched = await fetchSheetBitmap(
+      baseUrl,
+      prompt.trim(),
+      token,
+      tpl.backendTemplateKey,
+      portraits ? { frontUrl: portraits.front, backUrl: portraits.back } : undefined,
+    );
     try {
       const keys = collectReferencedSprites(char);
       // Detect poses by their green gaps (robust to NB2's variable output size/
@@ -305,6 +318,44 @@ export function CreatorPage() {
     } finally {
       fetched.bitmap.close();
       URL.revokeObjectURL(fetched.sheetUrl);
+    }
+  };
+
+  // Pick + downscale a reference photo. Clears any stale portraits so the next
+  // "Generate portraits" works from the new image.
+  const onPickImage = async (file: File | undefined): Promise<void> => {
+    if (!file) return;
+    setError(null);
+    try {
+      const dataUri = await fileToDataUri(file);
+      setRefImage(dataUri);
+      setPortraits(null);
+    } catch (e) {
+      setError(`Could not read that image: ${(e as Error).message}`);
+    }
+  };
+
+  // From the uploaded photo, generate consistent front/back/headshot portraits
+  // (shown in the create view); front+back then steer the action-sheet re-skin.
+  const doGeneratePortraits = async (): Promise<void> => {
+    if (!refImage) return;
+    setError(null);
+    setStatus(null);
+    if (!API_BASE) {
+      setError('Portrait generation needs the BrawlBox API (set VITE_API_BASE_URL).');
+      return;
+    }
+    const token = await ensureToken();
+    if (token === undefined) return; // redirecting to sign in
+    setPortraitBusy(true);
+    try {
+      const set = await generatePortraits(API_BASE, refImage, prompt.trim(), token);
+      setPortraits(set);
+      setStatus('Portraits ready — review them below, then generate sprites.');
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setPortraitBusy(false);
     }
   };
 
@@ -418,7 +469,8 @@ export function CreatorPage() {
     // Locked while a fighter is mid-generation: switching would swap the working
     // character out from under the running bake, and the in-progress fighter has
     // no usable atlas yet anyway.
-    if (imgBusy) return;
+    if (imgBusy || portraitBusy) return;
+    setPortraits(null); // portraits belong to the fighter that produced them
     setCharacter(c.character);
     setJson(JSON.stringify(c.character, null, 2));
     setSaveState('idle'); // a loaded character is already persisted
@@ -589,7 +641,31 @@ export function CreatorPage() {
                     : EXAMPLE
                 }
               />
-              <Button onClick={generate} disabled={busy || imgBusy}>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="refimg" className="text-muted-foreground">
+                  Reference photo (optional)
+                </Label>
+                <input
+                  id="refimg"
+                  type="file"
+                  accept="image/*"
+                  disabled={busy || imgBusy || portraitBusy}
+                  onChange={(e) => void onPickImage(e.target.files?.[0])}
+                  className="text-xs text-muted-foreground file:mr-2 file:rounded-md file:border-0 file:bg-secondary file:px-3 file:py-1 file:text-sm"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Upload a face or full-body photo — we generate matching front/back/headshot art and
+                  use it to skin your fighter.
+                </p>
+                {refImage && (
+                  <img
+                    src={refImage}
+                    alt="reference"
+                    className="mt-1 h-28 w-auto rounded-md border border-input object-contain"
+                  />
+                )}
+              </div>
+              <Button onClick={generate} disabled={busy || imgBusy || portraitBusy}>
                 {busy
                   ? template
                     ? 'Preparing…'
@@ -601,6 +677,19 @@ export function CreatorPage() {
 
               {character && (
                 <>
+                  {refImage && (
+                    <Button
+                      variant="secondary"
+                      onClick={() => void doGeneratePortraits()}
+                      disabled={busy || imgBusy || portraitBusy}
+                    >
+                      {portraitBusy
+                        ? 'Generating portraits… (~2 min)'
+                        : portraits
+                          ? 'Regenerate portraits'
+                          : '2 · Generate portraits'}
+                    </Button>
+                  )}
                   {!BACKEND_MODE && (
                     <div className="flex items-center gap-2">
                       <Label htmlFor="model" className="text-muted-foreground whitespace-nowrap">
@@ -614,14 +703,16 @@ export function CreatorPage() {
                       />
                     </div>
                   )}
-                  <Button variant="secondary" onClick={generateSprites} disabled={busy || imgBusy}>
+                  <Button
+                    variant="secondary"
+                    onClick={generateSprites}
+                    disabled={busy || imgBusy || portraitBusy}
+                  >
                     {imgBusy
                       ? hasSprites || BACKEND_MODE
                         ? 'Generating sprites…'
                         : `Generating sprites… ${imgProgress?.done ?? 0}/${imgProgress?.total ?? '?'}`
-                      : hasSprites
-                        ? '2 · Regenerate sprites'
-                        : '2 · Generate sprites'}
+                      : `${refImage ? '3' : '2'} · ${hasSprites ? 'Regenerate' : 'Generate'} sprites`}
                   </Button>
                   <p className="text-xs text-muted-foreground">
                     {BACKEND_MODE
@@ -650,6 +741,44 @@ export function CreatorPage() {
               {status && <p className="text-sm text-primary">{status}</p>}
             </CardContent>
           </Card>
+
+          {portraits && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Portraits</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-3 gap-2">
+                  {(
+                    [
+                      ['Front', portraits.front],
+                      ['Back', portraits.back],
+                      ['Headshot', portraits.headshot],
+                    ] as const
+                  ).map(([label, url]) => (
+                    <a
+                      key={label}
+                      href={url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex flex-col items-center gap-1"
+                    >
+                      <img
+                        src={url}
+                        alt={label}
+                        className="aspect-[3/4] w-full rounded-md border border-input bg-white object-contain"
+                      />
+                      <span className="text-xs text-muted-foreground">{label}</span>
+                    </a>
+                  ))}
+                </div>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Generated from your reference. Front &amp; back skin the fighter; the headshot is
+                  kept for in-game use.
+                </p>
+              </CardContent>
+            </Card>
+          )}
 
           {json && (
             <Card className="flex-1">

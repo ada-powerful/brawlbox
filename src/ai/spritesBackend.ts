@@ -98,13 +98,21 @@ export async function fetchSheetBitmap(
   description: string,
   token?: string | null,
   templateKey?: string,
+  /** Front/back portrait URLs to use as the look reference (else gpt-image). */
+  refs?: { frontUrl?: string; backUrl?: string },
 ): Promise<FetchedSheet> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (token) headers.Authorization = `Bearer ${token}`;
+  const body: Record<string, string> = { description };
+  if (templateKey) body.templateKey = templateKey;
+  if (refs?.frontUrl && refs.backUrl) {
+    body.frontUrl = refs.frontUrl;
+    body.backUrl = refs.backUrl;
+  }
   const res = await fetch(`${baseUrl}/generate/sprites`, {
     method: 'POST',
     headers,
-    body: JSON.stringify(templateKey ? { description, templateKey } : { description }),
+    body: JSON.stringify(body),
   });
   if (!res.ok) {
     const text = await res.text().catch(() => '');
