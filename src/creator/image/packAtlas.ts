@@ -45,12 +45,23 @@ function makeCanvas(w: number, h: number): { canvas: OffscreenCanvas | HTMLCanva
   return { canvas };
 }
 
+// Encode the atlas as WebP (alpha-preserving, ~7× smaller than PNG). A 4K-sourced
+// 240px-cell atlas is ~7MB as PNG — too big to round-trip as base64 in the
+// /characters save body (it silently fails the request-payload limit, so the
+// atlas never persists → the saved fighter loads as a silhouette). WebP q0.92
+// brings it to ~1MB with no visible quality loss. `loadAtlasTextures` forces the
+// texture parser (decodes by sniffing bytes, not extension), so WebP loads from
+// both the in-session blob URL and the presigned S3 URL.
+const ATLAS_TYPE = 'image/webp';
+const ATLAS_QUALITY = 0.92;
 async function toBlob(canvas: OffscreenCanvas | HTMLCanvasElement): Promise<Blob> {
-  if ('convertToBlob' in canvas) return canvas.convertToBlob({ type: 'image/png' });
+  if ('convertToBlob' in canvas)
+    return canvas.convertToBlob({ type: ATLAS_TYPE, quality: ATLAS_QUALITY });
   return new Promise((resolve, reject) =>
     (canvas as HTMLCanvasElement).toBlob(
       (b) => (b ? resolve(b) : reject(new Error('toBlob failed'))),
-      'image/png',
+      ATLAS_TYPE,
+      ATLAS_QUALITY,
     ),
   );
 }
