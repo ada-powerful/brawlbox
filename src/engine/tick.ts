@@ -6,7 +6,7 @@ import type { Character } from './schema.ts';
 import { applyStateHeader, stepStateMachine } from './stateMachine.ts';
 import { applyBinds, applyThrows, detectThrows } from './throw.ts';
 import type { Inputs, Player, World } from './world.ts';
-import { STAGE_LEFT_X, STAGE_RIGHT_X } from './world.ts';
+import { isDowned, KO_DELAY, STAGE_CEILING, STAGE_LEFT_X, STAGE_RIGHT_X } from './world.ts';
 
 export function tick(world: World, characters: Record<string, Character>, inputs: Inputs): World {
   if (world.matchOver) {
@@ -21,6 +21,10 @@ export function tick(world: World, characters: Record<string, Character>, inputs
 
     const inp = inputs.players[i]?.buttons ?? 0;
     recordInput(p.inputBuffer, inp);
+
+    // OTG counter only persists while the player stays knocked down.
+    const st = character.states[p.stateId];
+    if (!st || !isDowned(st.type, st.moveType)) p.otgHits = 0;
 
     if (p.hitPause > 0) {
       p.hitPause--;
@@ -49,6 +53,9 @@ export function tick(world: World, characters: Record<string, Character>, inputs
   const events = detectHits(world, characters);
   applyHits(events, world, characters);
 
+  // Defeated fighters drop into their KO (lying) state. Velocity is kept so a
+  // launched victim keeps falling — applyPhysics gives KO'd airborne players
+  // gravity even though the lying state itself is grounded-physics.
   for (const p of world.players) {
     if (!p) continue;
     if (p.life <= 0 && p.stateId !== 'ko') {
@@ -64,7 +71,7 @@ export function tick(world: World, characters: Record<string, Character>, inputs
     }
   }
 
-  if (world.players.length >= 2) {
+  if (!world.matchOver && world.players.length >= 2) {
     let alive = 0;
     let lastAlive = -1;
     for (let i = 0; i < world.players.length; i++) {
@@ -74,22 +81,39 @@ export function tick(world: World, characters: Record<string, Character>, inputs
         lastAlive = i;
       }
     }
-    if (alive <= 1) {
-      world.matchOver = true;
-      world.winner = alive === 1 ? lastAlive : null;
-    }
-  }
 
-  // Round timer: count down, and on time-up decide by remaining life.
-  if (!world.matchOver) {
-    world.roundTime--;
-    if (world.roundTime <= 0) {
-      world.roundTime = 0;
-      world.matchOver = true;
-      const p0 = world.players[0];
-      const p1 = world.players[1];
-      if (p0 && p1) {
-        world.winner = p0.life > p1.life ? 0 : p1.life > p0.life ? 1 : null;
+    if (alive <= 1) {
+      // KO buffer: keep simulating for KO_DELAY ticks so the loser falls + lies
+      // and the winner poses, THEN show the result.
+      if (world.koCountdown <= 0) {
+        world.koCountdown = KO_DELAY;
+        const winner = alive === 1 ? world.players[lastAlive] : undefined;
+        if (winner) {
+          const wc = characters[winner.characterId];
+          if (wc && wc.states['win']) {
+            winner.stateId = 'win';
+            winner.stateTime = 0;
+            winner.ctrl = false;
+            applyStateHeader(winner, wc, 'win');
+          }
+        }
+      }
+      world.koCountdown--;
+      if (world.koCountdown <= 0) {
+        world.matchOver = true;
+        world.winner = alive === 1 ? lastAlive : null;
+      }
+    } else {
+      // No KO — count the round clock down; decide by remaining life on time-up.
+      world.roundTime--;
+      if (world.roundTime <= 0) {
+        world.roundTime = 0;
+        world.matchOver = true;
+        const p0 = world.players[0];
+        const p1 = world.players[1];
+        if (p0 && p1) {
+          world.winner = p0.life > p1.life ? 0 : p1.life > p0.life ? 1 : null;
+        }
       }
     }
   }
@@ -155,11 +179,21 @@ function integratePosition(p: Player): void {
     p.pos.y = 0;
     if (p.vel.y < 0) p.vel.y = 0;
   }
+  if (p.pos.y > STAGE_CEILING) {
+    p.pos.y = STAGE_CEILING;
+    if (p.vel.y > 0) p.vel.y = 0; // bonk: gravity then pulls them back down
+  }
 }
 
 function applyPhysics(p: Player, character: Character): void {
   const state = character.states[p.stateId];
   if (!state) return;
+  // A defeated fighter still in the air falls under gravity (the lying KO state
+  // is grounded-physics, which would otherwise freeze a launched victim aloft).
+  if (p.life <= 0 && p.pos.y > 0) {
+    p.vel.y -= character.data.gravity;
+    return;
+  }
   switch (state.physics) {
     case 'A':
       p.vel.y -= character.data.gravity;

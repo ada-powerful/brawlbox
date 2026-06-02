@@ -7,12 +7,28 @@ export const STAGE_HEIGHT = 540;
 export const GROUND_Y_SCREEN = 460;
 export const STAGE_LEFT_X = 40;
 export const STAGE_RIGHT_X = 920;
+/**
+ * Juggle ceiling: max height (pos.y) any fighter can reach. Well above a normal
+ * jump (~120px) so it only bites runaway juggles — without it, repeated airborne
+ * launches stack height unbounded (each re-launch sets upward velocity from an
+ * ever-higher point) and the victim rockets off the top of the screen forever.
+ */
+export const STAGE_CEILING = 380;
 
 /** Round length in simulation ticks (60Hz). 30 seconds. */
 export const ROUND_TIME_TICKS = 30 * 60;
 
 /** Maximum power-meter value. */
 export const MAX_POWER = 3000;
+
+/** Max OTG (on-the-ground) follow-up hits a downed victim can take before forced wake-up. */
+export const MAX_OTG = 3;
+
+/**
+ * Ticks the round keeps simulating after a KO before the result is finalized —
+ * a buffer so the defeated fighter can fall + lie down and the winner can pose.
+ */
+export const KO_DELAY = 120;
 
 export const Btn = {
   Up: 1 << 0,
@@ -74,6 +90,13 @@ export interface Player {
   moveHit: boolean;
   /** The current attack was blocked (drives moveGuarded/moveContact). */
   moveGuarded: boolean;
+  /** OTG follow-up hits taken in the current knockdown (reset on wake-up). */
+  otgHits: number;
+}
+
+/** A grounded, still-alive downed state — the only state OTG follow-ups target. */
+export function isDowned(stateType: string, moveType: string): boolean {
+  return stateType === 'L' && moveType === 'H';
 }
 
 export interface World {
@@ -83,6 +106,8 @@ export interface World {
   winner: number | null;
   /** Ticks remaining in the round; counts down from ROUND_TIME_TICKS to 0. */
   roundTime: number;
+  /** After a KO, counts down KO_DELAY→0; the result is finalized at 0 (0 = not in a KO sequence). */
+  koCountdown: number;
 }
 
 export function createWorld(p1Char = 'base', p2Char = 'base'): World {
@@ -91,6 +116,7 @@ export function createWorld(p1Char = 'base', p2Char = 'base'): World {
     matchOver: false,
     winner: null,
     roundTime: ROUND_TIME_TICKS,
+    koCountdown: 0,
     players: [
       {
         characterId: p1Char,
@@ -113,6 +139,7 @@ export function createWorld(p1Char = 'base', p2Char = 'base'): World {
         bind: null,
         moveHit: false,
         moveGuarded: false,
+        otgHits: 0,
       },
       {
         characterId: p2Char,
@@ -135,6 +162,7 @@ export function createWorld(p1Char = 'base', p2Char = 'base'): World {
         bind: null,
         moveHit: false,
         moveGuarded: false,
+        otgHits: 0,
       },
     ],
   };

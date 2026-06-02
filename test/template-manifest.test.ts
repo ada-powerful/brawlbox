@@ -72,11 +72,13 @@ describe('selectFrameIndices', () => {
 
 describe('inferSelector (fuzzy fallback for unmapped keys)', () => {
   test('places invented attack keys on a real attack band, never idle', () => {
+    // Kick (row 7) is the generic attack band; punch is row 6.
     expect(inferSelector('uppercut-startup')).toEqual({ row: 7, frac: 0 });
     expect(inferSelector('uppercut-active')).toEqual({ row: 7, frac: 0.5 });
     expect(inferSelector('uppercut-recovery')).toEqual({ row: 7, frac: 0.85 });
-    expect(inferSelector('superpunch-active')).toEqual({ row: 8, frac: 0.5 });
+    expect(inferSelector('superpunch-active')).toEqual({ row: 6, frac: 0.5 });
     expect(inferSelector('spin-kick')).toEqual({ row: 7, frac: 0.5 });
+    expect(inferSelector('guard-stand')).toEqual({ row: 5, frac: 0.5 });
   });
 
   test('returns undefined for keys it cannot place (caller falls back to stand)', () => {
@@ -88,12 +90,21 @@ describe('inferSelector (fuzzy fallback for unmapped keys)', () => {
 describe('selectFrameIndices with the default manifest', () => {
   // row r, frac f -> flat index r*4 + round(f*(4-1))
   test('new vocabulary keys resolve to distinct bands', () => {
-    const frames = grid(12, 4);
-    const got = selectFrameIndices(frames, ['crouch', 'dash', 'kick-active', 'punch-active']);
-    expect(got.crouch).toBe(6 * 4 + 2); // row 6, frac 0.5
-    expect(got.dash).toBe(4 * 4 + 2); // row 4, frac 0.5
-    expect(got['kick-active']).toBe(7 * 4 + 2); // row 7
-    expect(got['punch-active']).toBe(8 * 4 + 2); // row 8
+    const frames = grid(13, 4);
+    const got = selectFrameIndices(frames, [
+      'guard-stand',
+      'dash-0',
+      'kick-active',
+      'punch-active',
+      'hit-crouch',
+      'getup',
+    ]);
+    expect(got['guard-stand']).toBe(5 * 4 + Math.round(0.25 * 3)); // row 5
+    expect(got['dash-0']).toBe(4 * 4 + Math.round(0.4 * 3)); // row 4
+    expect(got['kick-active']).toBe(7 * 4 + Math.round(0.1 * 3)); // row 7
+    expect(got['punch-active']).toBe(6 * 4 + Math.round(0.2 * 3)); // row 6
+    expect(got['hit-crouch']).toBe(9 * 4 + Math.round(0.889 * 3)); // row 9
+    expect(got.getup).toBe(10 * 4 + 3); // row 10, frac 1.0
   });
 
   test('an invented attack key lands on an attack frame, not the idle pose', () => {

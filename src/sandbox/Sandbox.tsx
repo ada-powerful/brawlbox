@@ -5,8 +5,11 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Character } from '@/engine/schema.ts';
 import { mountGame, type GameHandle } from '@/game/mountGame.ts';
+import { mountGallery, type GalleryHandle } from '@/game/mountGallery.ts';
 import { BASE_ATLAS_URL, BASE_CHARACTER, P1_COLOR, P2_COLOR } from '@/creator/defaults.ts';
 import { bakeFromSheet } from './bake.ts';
+import { HONDA_CHARACTER } from './honda.ts';
+import { KYO_TEMPLATE } from './kyoTemplate.ts';
 import kyoSheetUrl from './kyo-sheet.webp';
 
 interface Fighter {
@@ -24,12 +27,29 @@ const BASE_FIGHTER: Fighter = {
   atlasUrl: BASE_ATLAS_URL,
 };
 
+// E. Honda demo: charge specials, mash slap, meter super, command grab. Rendered
+// PROCEDURALLY (no atlasUrl) so each action draws its own colour-coded silhouette
+// — you can see headbutt (orange) vs super (gold) vs grab (green) vs block (blue)
+// vs hit (red) vs thrown (purple). Inputs (P1): charge back→forward+U = Headbutt ·
+// charge down→up+J = Splash · mash I = Hundred Slap · HCB+K = Oicho grab ·
+// full meter + charge back→forward+U+O = Super Headbutt.
+const HONDA_FIGHTER: Fighter = {
+  id: 'honda',
+  label: 'E. Honda (procedural action poses)',
+  character: HONDA_CHARACTER,
+};
+
+type Mode = 'match' | 'gallery';
+
 export function Sandbox() {
   const mountRef = useRef<HTMLDivElement>(null);
   const handleRef = useRef<GameHandle | null>(null);
-  const [fighters, setFighters] = useState<Fighter[]>([BASE_FIGHTER]);
+  const galleryRef = useRef<GalleryHandle | null>(null);
+  const [fighters, setFighters] = useState<Fighter[]>([BASE_FIGHTER, HONDA_FIGHTER]);
   const [p1Id, setP1Id] = useState('base');
   const [p2Id, setP2Id] = useState('base');
+  const [mode, setMode] = useState<Mode>('match');
+  const [freezeTimer, setFreezeTimer] = useState(false);
   const [status, setStatus] = useState('Baking sheet character…');
   const [error, setError] = useState<string | null>(null);
 
@@ -38,7 +58,7 @@ export function Sandbox() {
   useEffect(() => {
     let disposed = false;
     let bakedUrl: string | null = null;
-    bakeFromSheet(kyoSheetUrl, BASE_CHARACTER, { id: 'kyo', name: 'Kyo (sheet test)' })
+    bakeFromSheet(kyoSheetUrl, KYO_TEMPLATE, { id: 'kyo', name: 'Kyo (mapped actions)' })
       .then((baked) => {
         if (disposed) {
           URL.revokeObjectURL(baked.atlasUrl);
@@ -59,7 +79,8 @@ export function Sandbox() {
     };
   }, []);
 
-  // (Re)mount the match whenever the selected fighters resolve or change.
+  // (Re)mount the match — or the action gallery — whenever the selection,
+  // fighters, or mode change.
   useEffect(() => {
     const mount = mountRef.current;
     const p1 = fighters.find((f) => f.id === p1Id);
@@ -69,25 +90,70 @@ export function Sandbox() {
     let disposed = false;
     handleRef.current?.destroy();
     handleRef.current = null;
+    galleryRef.current?.destroy();
+    galleryRef.current = null;
 
-    // Same fighter on both sides is fine — one shared def in the registry. The
-    // roster ids are unique per character, so two different defs never collide.
-    mountGame(mount, {
-      p1: { character: p1.character, atlasUrl: p1.atlasUrl, color: P1_COLOR },
-      p2: { character: p2.character, atlasUrl: p2.atlasUrl, color: P2_COLOR },
-    })
-      .then((h) => {
-        if (disposed) h.destroy();
-        else handleRef.current = h;
+    if (mode === 'gallery') {
+      // Gallery cycles the selected fighter through ITS OWN actions (sprites when
+      // the fighter has an atlas, else the procedural stick figure).
+      mountGallery(mount, { character: p1.character, atlasUrl: p1.atlasUrl, color: P1_COLOR })
+        .then((h) => {
+          if (disposed) h.destroy();
+          else galleryRef.current = h;
+        })
+        .catch((e) => setError(`Gallery mount failed: ${(e as Error).message}`));
+    } else {
+      // Same fighter on both sides is fine — one shared def in the registry. The
+      // roster ids are unique per character, so two different defs never collide.
+      mountGame(mount, {
+        p1: { character: p1.character, atlasUrl: p1.atlasUrl, color: P1_COLOR },
+        p2: { character: p2.character, atlasUrl: p2.atlasUrl, color: P2_COLOR },
       })
-      .catch((e) => setError(`Mount failed: ${(e as Error).message}`));
+        .then((h) => {
+          if (disposed) h.destroy();
+          else {
+            handleRef.current = h;
+            h.setFreezeTimer(freezeTimer);
+          }
+        })
+        .catch((e) => setError(`Mount failed: ${(e as Error).message}`));
+    }
 
     return () => {
       disposed = true;
       handleRef.current?.destroy();
       handleRef.current = null;
+      galleryRef.current?.destroy();
+      galleryRef.current = null;
     };
-  }, [fighters, p1Id, p2Id]);
+  }, [fighters, p1Id, p2Id, mode]);
+
+  // Push timer-freeze changes to the live match handle without remounting, so
+  // toggling mid-round keeps the current state. Also bind `T` to toggle it.
+  useEffect(() => {
+    if (mode !== 'match') return;
+    handleRef.current?.setFreezeTimer(freezeTimer);
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.code === 'KeyT') setFreezeTimer((v) => !v);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [freezeTimer, mode]);
+
+  // Gallery keyboard controls: ←/→ step, space play/pause.
+  useEffect(() => {
+    if (mode !== 'gallery') return;
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.code === 'ArrowRight') galleryRef.current?.next();
+      else if (e.code === 'ArrowLeft') galleryRef.current?.prev();
+      else if (e.code === 'Space') {
+        e.preventDefault();
+        galleryRef.current?.togglePlay();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [mode]);
 
   const picker = (value: string, onChange: (id: string) => void) => (
     <select
@@ -124,31 +190,79 @@ export function Sandbox() {
 
       <div style={{ display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
         <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 13 }}>
-          <span style={{ color: '#ff5577' }}>P1</span>
+          <span style={{ color: '#ff5577' }}>{mode === 'gallery' ? 'Fighter' : 'P1'}</span>
           {picker(p1Id, setP1Id)}
         </label>
-        <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 13 }}>
-          <span style={{ color: '#55aaff' }}>P2</span>
-          {picker(p2Id, setP2Id)}
-        </label>
+        {mode === 'match' && (
+          <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 13 }}>
+            <span style={{ color: '#55aaff' }}>P2</span>
+            {picker(p2Id, setP2Id)}
+          </label>
+        )}
         <button
-          onClick={() => handleRef.current?.reset()}
-          style={{ padding: '4px 10px', borderRadius: 6, background: '#26262e', color: '#eee', border: '1px solid #333', cursor: 'pointer' }}
+          onClick={() => setMode((m) => (m === 'match' ? 'gallery' : 'match'))}
+          style={{ padding: '4px 10px', borderRadius: 6, background: '#3a2e4e', color: '#eee', border: '1px solid #5a4a7a', cursor: 'pointer' }}
         >
-          Reset (R)
+          {mode === 'match' ? 'Action gallery →' : '← Back to match'}
         </button>
-        <button
-          onClick={() => handleRef.current?.toggleDebug()}
-          style={{ padding: '4px 10px', borderRadius: 6, background: '#26262e', color: '#eee', border: '1px solid #333', cursor: 'pointer' }}
-        >
-          Debug (F1)
-        </button>
+        {mode === 'match' ? (
+          <>
+            <button
+              onClick={() => handleRef.current?.reset()}
+              style={{ padding: '4px 10px', borderRadius: 6, background: '#26262e', color: '#eee', border: '1px solid #333', cursor: 'pointer' }}
+            >
+              Reset (R)
+            </button>
+            <button
+              onClick={() => handleRef.current?.toggleDebug()}
+              style={{ padding: '4px 10px', borderRadius: 6, background: '#26262e', color: '#eee', border: '1px solid #333', cursor: 'pointer' }}
+            >
+              Debug (F1)
+            </button>
+            <button
+              onClick={() => setFreezeTimer((v) => !v)}
+              style={{
+                padding: '4px 10px',
+                borderRadius: 6,
+                background: freezeTimer ? '#2e4e3a' : '#26262e',
+                color: '#eee',
+                border: `1px solid ${freezeTimer ? '#4a7a5a' : '#333'}`,
+                cursor: 'pointer',
+              }}
+            >
+              {freezeTimer ? 'Timer frozen (T)' : 'Freeze timer (T)'}
+            </button>
+          </>
+        ) : (
+          <>
+            <button
+              onClick={() => galleryRef.current?.prev()}
+              style={{ padding: '4px 10px', borderRadius: 6, background: '#26262e', color: '#eee', border: '1px solid #333', cursor: 'pointer' }}
+            >
+              ◀ Prev (←)
+            </button>
+            <button
+              onClick={() => galleryRef.current?.togglePlay()}
+              style={{ padding: '4px 10px', borderRadius: 6, background: '#26262e', color: '#eee', border: '1px solid #333', cursor: 'pointer' }}
+            >
+              Play/Pause (Space)
+            </button>
+            <button
+              onClick={() => galleryRef.current?.next()}
+              style={{ padding: '4px 10px', borderRadius: 6, background: '#26262e', color: '#eee', border: '1px solid #333', cursor: 'pointer' }}
+            >
+              Next (▶)
+            </button>
+          </>
+        )}
       </div>
 
       <div ref={mountRef} style={{ border: '1px solid #333', borderRadius: 8, overflow: 'hidden' }} />
 
       <p style={{ fontSize: 12, color: '#9a9aa5', margin: 0, textAlign: 'center' }}>
-        P1: WASD move · J/K/L attack · P2: arrows + numpad · R restart · F1 / ` debug overlay
+        {mode === 'gallery'
+          ? "Gallery: cycling the selected fighter's own actions · ←/→ step · Space play/pause · colour = action group"
+          : 'P1: WASD move · J/K/L attack · P2: arrows + numpad · R restart · T freeze timer · F1 / ` debug overlay'}
       </p>
       {error ? (
         <p style={{ fontSize: 13, color: '#ff6b6b' }}>{error}</p>

@@ -1,7 +1,7 @@
 import { getActiveFrame } from './animation.ts';
 import type { AABB, Character } from './schema.ts';
 import type { Player, World } from './world.ts';
-import { STAGE_LEFT_X, STAGE_RIGHT_X } from './world.ts';
+import { isDowned, MAX_OTG, STAGE_LEFT_X, STAGE_RIGHT_X } from './world.ts';
 
 export interface BoxRect {
   minX: number;
@@ -51,8 +51,15 @@ export function detectHits(world: World, characters: Record<string, Character>):
       if (i === j) continue;
       const victim = world.players[j];
       if (!victim || victim.hitPause > 0 || victim.bind !== null) continue;
+      if (victim.life <= 0) continue; // already defeated — no comboing the corpse
       const vChar = characters[victim.characterId];
       if (!vChar) continue;
+      // Downed (knocked-down, still alive): only OTG-capable attacks connect, and
+      // only up to MAX_OTG times — otherwise a downed victim is invulnerable.
+      const vState = vChar.states[victim.stateId];
+      if (vState && isDowned(vState.type, vState.moveType)) {
+        if (!attacker.activeHitDef.canHitDown || victim.otgHits >= MAX_OTG) continue;
+      }
       const vFrame = getActiveFrame(victim, vChar);
       if (!vFrame || vFrame.hurtboxes.length === 0) continue;
 

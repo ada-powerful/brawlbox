@@ -2,7 +2,7 @@ import type { HitEvent } from './collision.ts';
 import type { Character, HitDef } from './schema.ts';
 import { applyStateHeader } from './stateMachine.ts';
 import type { Player, World } from './world.ts';
-import { Btn } from './world.ts';
+import { Btn, isDowned, MAX_OTG } from './world.ts';
 
 export function applyHits(
   events: HitEvent[],
@@ -63,6 +63,26 @@ export function applyHit(
   hitDef: HitDef,
   victimCharacter: Character,
 ): void {
+  // OTG follow-up: the victim is already knocked down (detectHits has confirmed
+  // the attack is OTG-capable and the limit isn't reached). Re-down them, or on
+  // the limit hit force a wake-up. A downed victim can't block, so skip guard.
+  const vState = victimCharacter.states[victim.stateId];
+  if (vState && isDowned(vState.type, vState.moveType)) {
+    victim.life -= hitDef.damage.hit;
+    if (victim.life < 0) victim.life = 0;
+    victim.otgHits++;
+    if (victim.otgHits >= MAX_OTG && victimCharacter.states['getup']) {
+      victim.stateId = 'getup';
+      applyStateHeader(victim, victimCharacter, 'getup');
+    }
+    victim.stateTime = 0; // restart the knockdown (or getup) timer
+    victim.hitPause = hitDef.pauseTime.p2;
+    attacker.hitPause = hitDef.pauseTime.p1;
+    attacker.moveHit = true;
+    attacker.activeHitDef = null;
+    return;
+  }
+
   const defense = resolveDefense(attacker, victim, hitDef, victimCharacter);
 
   if (defense === 'hit') {
@@ -70,12 +90,16 @@ export function applyHit(
     if (victim.life < 0) victim.life = 0;
 
     const isAir = victim.pos.y > 0;
-    const targetState = isAir ? 'hit.air' : 'hit.stand';
+    const v = isAir ? hitDef.airVelocity : hitDef.groundVelocity;
+    // An upward knockback launches the victim: route to the AIRBORNE hit state
+    // (physics 'A', gravity) so they arc up and fall back down. Otherwise a
+    // grounded victim in the gravity-less standing-hit state floats away forever.
+    const launched = v.y > 0;
+    const targetState = isAir || launched ? 'hit.air' : 'hit.stand';
     victim.stateId = targetState;
     victim.stateTime = 0;
     applyStateHeader(victim, victimCharacter, targetState);
 
-    const v = isAir ? hitDef.airVelocity : hitDef.groundVelocity;
     victim.vel.x = v.x * attacker.facing;
     victim.vel.y = v.y;
 

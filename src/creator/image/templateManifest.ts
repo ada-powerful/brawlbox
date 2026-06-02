@@ -11,31 +11,76 @@ export interface FrameSelector {
   frac: number;
 }
 
-// Layout of the default MUGEN action template (rows top→bottom), verified
-// empirically against a retextured sheet's detected bands:
-// 0 idle · 1 walk-fwd · 2 walk-back · 3 jump · 4 run/leap · 5 crouch-down
-// 6 crouch · 7 roundhouse kick · 8 forward punch · 9 attack · 10 hit · 11 knockdown
-// 12 lying + props
+// Layout of the MUGEN action template (rows top→bottom), grounded in the detected
+// bands of the Kyo reference sheet (13 bands; frame counts in parens):
+//   0  idle (5)
+//   1  walk fwd/back (6)
+//   2  light jump → land (7)
+//   3  high jump (4)            — ascent + tuck; descent mirrors ascent
+//   4  forward dash / run (6)
+//   5  guard (5)                — 0-2 standing guard, 3-4 crouch guard
+//   6  punch (6)               — 0-3 standing punch, 4-5 crouch punch (light/heavy share art)
+//   7  kick (11)               — 0-2 stand kick, 3-5 crouch kick, 6-7 jump attack, 8-10 charged kick
+//   8  charged punch (6)
+//   9  hit (10)                — 0-6 standing hit, 7-9 crouch hit
+//   10 knockdown (7)           — 0-5 knocked down, 6 get-up
+//   11 lying (2)               — KO / on-the-ground (OTG)
+//   12 props (6)               — projectiles / fx (unmapped)
+// `frac` targets a specific frame index within the row: frac = index / (rowLen - 1).
 export const DEFAULT_TEMPLATE_MANIFEST: Record<string, FrameSelector> = {
+  // 0 idle
   stand: { row: 0, frac: 0 },
-  'walk-0': { row: 1, frac: 0 },
-  'walk-1': { row: 1, frac: 0.25 },
-  // Row 4 is the airborne (moving) jump — fuller poses than the standing leap (row 3).
-  'jump-rise': { row: 4, frac: 0.2 },
-  'jump-fall': { row: 4, frac: 0.7 },
-  // Row 4 is also the running/leaping band — a natural forward-dash pose.
-  dash: { row: 4, frac: 0.5 },
-  crouch: { row: 6, frac: 0.5 },
-  // Row 7 is the kick; row 8 is the actual forward punch.
-  'kick-startup': { row: 7, frac: 0 },
-  'kick-active': { row: 7, frac: 0.5 },
-  'kick-recovery': { row: 7, frac: 0.85 },
-  'punch-startup': { row: 8, frac: 0 },
-  'punch-active': { row: 8, frac: 0.5 },
-  'punch-recovery': { row: 8, frac: 0.85 },
-  'hit-stand': { row: 10, frac: 0 },
-  'hit-air': { row: 11, frac: 0 },
-  ko: { row: 11, frac: 0.95 },
+  // 1 walk
+  'walk-0': { row: 1, frac: 0.0 },
+  'walk-1': { row: 1, frac: 0.4 },
+  'walk-2': { row: 1, frac: 0.6 },
+  'walk-3': { row: 1, frac: 1.0 },
+  // 2 light jump → land
+  'jump-rise': { row: 2, frac: 0.167 },
+  'jump-fall': { row: 2, frac: 0.667 },
+  'jump-land': { row: 2, frac: 1.0 },
+  // 3 high jump
+  'highjump-rise': { row: 3, frac: 0.333 },
+  'highjump-fall': { row: 3, frac: 1.0 },
+  // 4 dash / run
+  'dash-0': { row: 4, frac: 0.4 },
+  'dash-1': { row: 4, frac: 0.8 },
+  // 5 guard (0-2 stand, 3-4 crouch)
+  'guard-stand': { row: 5, frac: 0.25 },
+  'guard-crouch': { row: 5, frac: 1.0 },
+  // 6 punch (0-3 stand, 4-5 crouch)
+  'punch-startup': { row: 6, frac: 0.0 },
+  'punch-active': { row: 6, frac: 0.2 },
+  'punch-recovery': { row: 6, frac: 0.6 },
+  'crouchpunch-active': { row: 6, frac: 0.8 },
+  // 7 kick (0-2 stand, 3-5 crouch, 6-7 jump attack, 8-10 charged)
+  'kick-startup': { row: 7, frac: 0.0 },
+  'kick-active': { row: 7, frac: 0.1 },
+  'kick-recovery': { row: 7, frac: 0.2 },
+  'crouchkick-startup': { row: 7, frac: 0.3 },
+  'crouchkick-active': { row: 7, frac: 0.4 },
+  'crouchkick-recovery': { row: 7, frac: 0.5 },
+  jumpattack: { row: 7, frac: 0.6 },
+  // Charged kick spans the row's last three frames (8-10): effect, swing, leg-up.
+  'kickcharge-startup': { row: 7, frac: 0.8 },
+  'kickcharge-active': { row: 7, frac: 0.9 },
+  'kickcharge-recovery': { row: 7, frac: 1.0 },
+  // 8 charged punch
+  'punchcharge-startup': { row: 8, frac: 0.0 },
+  'punchcharge-active': { row: 8, frac: 0.4 },
+  'punchcharge-recovery': { row: 8, frac: 0.8 },
+  // 9 hit (0-6 stand, 7-9 crouch)
+  'hit-stand': { row: 9, frac: 0.111 },
+  'hit-crouch': { row: 9, frac: 0.889 },
+  // 10 knockdown (0-5 down, 6 get-up)
+  launch: { row: 10, frac: 0.0 },
+  knockdown: { row: 10, frac: 0.333 },
+  'lying-flat': { row: 10, frac: 0.833 }, // settled flat-on-back (defeat pose)
+  getup: { row: 10, frac: 1.0 },
+  // 11 lying / OTG
+  lying: { row: 11, frac: 0.0 },
+  downed: { row: 11, frac: 1.0 },
+  ko: { row: 11, frac: 0.0 },
 };
 
 /**
@@ -56,13 +101,15 @@ export function inferSelector(key: string): FrameSelector | undefined {
   // Which template band the name points at. Kick (row 7) is the generic attack
   // band — it has the most frames, so unrecognized attacks land cleanly.
   let row: number | undefined;
-  if (/punch|jab|straight|cross/.test(k)) row = 8;
+  if (/guard|block/.test(k)) row = 5;
+  else if (/punch|jab|straight|cross/.test(k)) row = 6;
   else if (/kick|uppercut|special|super|smash|slam|strike|attack|combo|swing|hook/.test(k)) row = 7;
   else if (/dash|run|dodge|roll|rush/.test(k)) row = 4;
-  else if (/crouch|duck|low|squat/.test(k)) row = 6;
-  else if (/jump|air|aerial|fall|rise|leap/.test(k)) row = 4;
+  else if (/jump|air|aerial|fall|rise|leap/.test(k)) row = 2;
+  else if (/knockdown|down|launch|getup|lying|ko/.test(k)) row = 10;
+  else if (/hit|hurt/.test(k)) row = 9;
   else if (/walk|step/.test(k)) row = 1;
-  else if (/stand|idle/.test(k)) row = 0;
+  else if (/stand|idle|crouch|duck|low|squat/.test(k)) row = 0;
 
   return row === undefined ? undefined : { row, frac };
 }

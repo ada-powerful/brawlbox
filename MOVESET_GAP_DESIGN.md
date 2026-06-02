@@ -73,12 +73,85 @@ Automatic block resolution in `applyHit` (`src/engine/hitDef.ts`):
 - Determinism replay still hashes identically (blocking is fully deterministic —
   guard decision reads the victim's buffered input + positions).
 
+## Round 4 — End-to-end validation: E. Honda demo character (DONE)
+
+`src/sandbox/honda.ts` patches the `base` moveset into an E. Honda-style fighter
+that exercises every round 1–3 feature together, and is wired into the sandbox
+roster (reuses the base atlas). Proven by `test/honda.test.ts` (9 tests) which
+drives real input scripts through `tick`:
+
+- **Sumo Headbutt** — `[B]35,F,x` charge special (and a no-charge input correctly
+  does *not* fire it).
+- **Sumo Splash** — `[D]35,U+a` charge anti-air (up+button resolves before jump).
+- **Hundred Hand Slap** — `y,y,y` mash (y is unbound in base, so no normal eats it).
+- **Super Headbutt** — `[B]45,F,x+z` gated on `power>=1000`; drains the meter and
+  falls through to the regular headbutt without meter.
+- **Oicho Throw** — `~F,DF,D,DB,B,b` HCB command grab via the Throw subsystem.
+- Specials are prepended to stand/walk/crouch (cancelable while charging) and
+  build power; a 600-tick two-world replay confirms Honda is deterministic.
+
+## Round 5 — Canonical action vocabulary + procedural poses (DONE)
+
+`src/render/poses.ts` defines the shared "basic action" set every move maps onto.
+
+- **`CANONICAL_ACTIONS`** — the documented vocabulary (movement / attack ×
+  stance×strength / special / super / throw / guard / hurt / thrown / system).
+  This is the authoring + art target: a fully-realised character supplies one
+  animation per id (hand-drawn or NB2-generated), so any character slots into the
+  same set.
+- **`actionGroup(id)`** pattern-matches *ad-hoc* anim ids too (`standHP`,
+  `special.slap`, `guard.crouch`…), so existing characters classify for free.
+- **`poseFor(id, frame, baseColor)`** → a distinct, colour-coded silhouette per
+  group (attack=white, special=orange, super=gold, throw=green, guard=blue,
+  hurt=red, thrown=purple, movement=player tint), with a forward limb bar that
+  extends on a strike's active frame. The procedural renderer (`fighter.ts`)
+  draws it, so a character with NO sprite art is still fully legible for testing.
+- Honda's specials now use canonical anim ids (`special.headbutt`,
+  `super.headbutt`, `throw.start/execute`, `special.splash/slap`) and the sandbox
+  renders Honda procedurally — every move reads as its own pose/colour.
+
+## Round 6 — Complete reference base + action gallery (DONE)
+
+- **(a) `base` is now a complete canonical reference.** `characters/base/character.json`
+  declares an animation for *every* `CANONICAL_ACTIONS` id (reusing the placeholder
+  atlas), so it's the authoring/art template and the gallery's sprite path resolves
+  for it. A bun check asserts "all canonical actions covered"; determinism/schema
+  tests stay green.
+- **(b) Action gallery** (`src/game/mountGallery.ts` + a sandbox mode toggle).
+  Cycles the selected fighter through every canonical action, labelled by id +
+  group + description with the group colour. Sprite-backed when the character has
+  that anim + an atlas (base), else the procedural pose (Honda). Controls: ←/→
+  step, Space play/pause, auto-advance otherwise. Great for eyeballing art
+  coverage and reading each pose.
+
+## Round 7 — Kyo action template (sheet row → action mapping) (DONE)
+
+The MUGEN action sheet is now a reusable **character template**: each row maps to
+preset actions, and a generated/retextured sheet with the same layout slots in.
+
+- **`templateManifest.ts`** — `DEFAULT_TEMPLATE_MANIFEST` rewritten to the Kyo
+  sheet's 13 detected bands (frame counts verified: 5,6,7,4,6,5,6,11,6,10,7,2,6),
+  mapping ~36 per-action sprite keys to `(row, frac)` where `frac = index/(len-1)`.
+  Rows: 0 idle · 1 walk · 2 light-jump · 3 high-jump · 4 dash · 5 guard
+  (stand+crouch) · 6 punch (stand+crouch) · 7 kick (stand/crouch/jump-attack/
+  charged) · 8 charged-punch · 9 hit (stand+crouch) · 10 knockdown+getup · 11
+  lying/OTG · 12 props.
+- **`src/sandbox/kyoTemplate.ts`** — `KYO_TEMPLATE`: reuses `base`'s state machine
+  but its animations reference the per-action sprite keys, so `bakeFromSheet`
+  slices the right frame per action. The sandbox bakes Kyo through it; the gallery
+  shows each action with the correct sheet frame.
+- A mapping sim asserts every template sprite key resolves to its intended row.
+
+NOTE: animation/art mapping is wired; the *gameplay rules* the spec describes
+(¼-damage guard chip, hold-to-charge, OTG max-3 with crouch light kick, launch-
+vs-in-place knockdown, get-up) still ride on `base`'s state machine and are the
+next gameplay pass. Frame `frac` values are best-effort and meant to be tuned by
+eye in the gallery.
+
 ## Deferred (next round)
 
-- **Throw escapes / teching**, air throws, command-grab motions (the `[charge]`
-  and `/held` grammar from round 1 is ready to author these).
+- **Throw escapes / teching**, air throws.
 - **Guard meter / guard-crush, parries, pushblock** (advanced defense).
 - De-hardcode `'stand'`/`'ko'`/`'hit.*'`/`'guard.*'` transition literals in
   `tick.ts`/`hitDef.ts` so reactions are fully author-controlled.
-- Author Honda's actual charge specials onto a character now that the grammar,
-  meter, throws, and guard all exist (end-to-end validation in the sandbox).
+- Real Honda sprite art (the demo reuses base placeholder sprites).

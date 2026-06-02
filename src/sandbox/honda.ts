@@ -96,7 +96,35 @@ const newAnimations: Record<string, Animation> = {
       },
     ],
   },
+  // Distinct canonical anims so each special renders as its own pose (and carries
+  // its own hit/hurtboxes). Sprite keys reuse the base atlas (placeholder art).
+  'special.headbutt': attackAnim({ x: 30, y: 55, w: 60, h: 30 }),
+  'super.headbutt': attackAnim({ x: 30, y: 48, w: 84, h: 46 }),
+  'throw.start': holdAnim('punch-startup'),
+  'throw.execute': holdAnim('punch-recovery'),
 };
+
+// A 3-frame strike anim (startup → active w/ hitbox → recovery) reusing base sprites.
+function attackAnim(hitbox: { x: number; y: number; w: number; h: number }): Animation {
+  const hurt = [{ x: -30, y: 0, w: 60, h: 100 }];
+  return {
+    loop: false,
+    frames: [
+      { sprite: 'punch-startup', duration: 4, offset: { x: 0, y: 0 }, hurtboxes: hurt, hitboxes: [] },
+      { sprite: 'punch-active', duration: 5, offset: { x: 0, y: 0 }, hurtboxes: hurt, hitboxes: [hitbox] },
+      { sprite: 'punch-recovery', duration: 6, offset: { x: 0, y: 0 }, hurtboxes: hurt, hitboxes: [] },
+    ],
+  };
+}
+
+function holdAnim(sprite: string): Animation {
+  return {
+    loop: false,
+    frames: [
+      { sprite, duration: -1, offset: { x: 0, y: 0 }, hurtboxes: [{ x: -30, y: 0, w: 60, h: 100 }], hitboxes: [] },
+    ],
+  };
+}
 
 const newStates: Record<string, State> = {
   // Sumo Headbutt — charge back, lunge forward. (physics S so it decelerates.)
@@ -104,7 +132,7 @@ const newStates: Record<string, State> = {
     type: 'S',
     moveType: 'A',
     physics: 'S',
-    anim: 'punch',
+    anim: 'special.headbutt',
     ctrl: 0,
     velSet: { x: 0, y: 0 },
     controllers: [
@@ -181,7 +209,7 @@ const newStates: Record<string, State> = {
     type: 'S',
     moveType: 'A',
     physics: 'S',
-    anim: 'punch',
+    anim: 'super.headbutt',
     ctrl: 0,
     velSet: { x: 0, y: 0 },
     controllers: [
@@ -206,7 +234,7 @@ const newStates: Record<string, State> = {
     type: 'S',
     moveType: 'A',
     physics: 'N',
-    anim: 'punch',
+    anim: 'throw.start',
     ctrl: 0,
     velSet: { x: 0, y: 0 },
     controllers: [
@@ -231,7 +259,7 @@ const newStates: Record<string, State> = {
     type: 'S',
     moveType: 'A',
     physics: 'N',
-    anim: 'punch',
+    anim: 'throw.execute',
     ctrl: 0,
     velSet: { x: 0, y: 0 },
     controllers: [{ type: 'ChangeState', value: 'stand', ctrl: 1, trigger: T.timeGe(24) }],
@@ -256,8 +284,11 @@ const standSpecials: Controller[] = [
 const newCommands = [
   { name: 'superheadbutt', motion: '[B]45,F,x+z', bufferTicks: 14 },
   { name: 'headbutt', motion: '[B]35,F,x', bufferTicks: 14 },
-  { name: 'splash', motion: '[D]35,U,a', bufferTicks: 14 },
-  { name: 'slap', motion: 'x,x,x', bufferTicks: 12 },
+  // Up+button together (not U then a) so it resolves before `stand`'s jump.
+  { name: 'splash', motion: '[D]35,U+a', bufferTicks: 14 },
+  // Mash MP (y) — base binds x/z/a/c to normals but leaves y free, so the
+  // three-tap command isn't intercepted by a single-press normal.
+  { name: 'slap', motion: 'y,y,y', bufferTicks: 12 },
   { name: 'oicho', motion: '~F,DF,D,DB,B,b', bufferTicks: 24 },
 ];
 
@@ -283,9 +314,13 @@ function buildHonda(): Character {
     if (st) st.controllers = [{ type: 'PowerAdd', value: 30, trigger: T.timeEq(0) }, ...st.controllers];
   }
 
-  // Specials are cancel-priority over normals: prepend them to stand.
-  const stand = c.states['stand'] as { controllers: unknown[] };
-  stand.controllers = [...standSpecials, ...stand.controllers];
+  // Specials are cancel-priority over normals AND must be reachable while
+  // charging — holding back/down puts Honda in walk/crouch, so the special
+  // commands are checked from all three neutral ground states.
+  for (const id of ['stand', 'walk', 'crouch']) {
+    const st = c.states[id] as { controllers: unknown[] };
+    st.controllers = [...standSpecials, ...st.controllers];
+  }
 
   return parseCharacter(c);
 }

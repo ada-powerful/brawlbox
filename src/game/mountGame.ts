@@ -31,6 +31,8 @@ export interface MountOptions {
 export interface GameHandle {
   reset: () => void;
   toggleDebug: () => void;
+  /** Freeze the round timer so the match never times out — for continuous debugging. */
+  setFreezeTimer: (on: boolean) => void;
   destroy: () => void;
 }
 
@@ -134,10 +136,19 @@ export async function mountGame(mount: HTMLElement, opts: MountOptions): Promise
 
   const updateCamera = updateCameraFn(camera);
 
+  // When frozen, the round timer is restored after each tick so it never reaches
+  // zero and times out the match — lets the sandbox run a round indefinitely.
+  let freezeTimer = false;
+
   const handle = startLoop({
     createWorld: () => createWorld(p1.character.meta.id, p2.character.meta.id),
     pollInputs,
-    tick: (w, inp) => tick(w, characters, inp),
+    tick: (w, inp) => {
+      const before = w.roundTime;
+      const next = tick(w, characters, inp);
+      if (freezeTimer) next.roundTime = before;
+      return next;
+    },
     render: (prev, curr, alpha) => {
       const a = prev.players[0];
       const b = curr.players[0];
@@ -165,6 +176,9 @@ export async function mountGame(mount: HTMLElement, opts: MountOptions): Promise
   return {
     reset: () => handle.reset(),
     toggleDebug: () => debugOverlay.toggle(),
+    setFreezeTimer: (on: boolean) => {
+      freezeTimer = on;
+    },
     destroy: () => {
       handle.stop();
       window.removeEventListener('keydown', onKey);

@@ -4,37 +4,7 @@ import type { Player } from '../engine/world.ts';
 import { GROUND_Y_SCREEN } from '../engine/world.ts';
 import { lerp } from '../engine/vec.ts';
 import { animFrameAt } from '../runtime/atlas.ts';
-
-interface FrameShape {
-  w: number;
-  h: number;
-  leanX: number;
-  color: number;
-}
-
-function frameShape(animId: string, frame: number, baseColor: number): FrameShape {
-  switch (animId) {
-    case 'walk':
-      return { w: 60, h: 100, leanX: frame === 0 ? -4 : 4, color: baseColor };
-    case 'jump.rise':
-      return { w: 48, h: 110, leanX: 0, color: baseColor };
-    case 'jump.fall':
-      return { w: 72, h: 88, leanX: 0, color: baseColor };
-    case 'punch':
-      if (frame === 0) return { w: 56, h: 100, leanX: -4, color: baseColor };
-      if (frame === 1) return { w: 80, h: 100, leanX: 12, color: 0xffffff };
-      return { w: 60, h: 100, leanX: 0, color: baseColor };
-    case 'hit.stand':
-      return { w: 60, h: 96, leanX: -10, color: 0xff5555 };
-    case 'hit.air':
-      return { w: 60, h: 90, leanX: -14, color: 0xff5555 };
-    case 'ko':
-      return { w: 100, h: 30, leanX: 0, color: 0x666666 };
-    case 'stand':
-    default:
-      return { w: 60, h: 100, leanX: 0, color: baseColor };
-  }
-}
+import { poseFor } from './poses.ts';
 
 export interface FighterRendererOpts {
   /** When both are provided, render real atlas sprites; otherwise fall back to procedural shapes. */
@@ -92,11 +62,36 @@ export class FighterRenderer {
     }
     const g = this.gfx;
     if (!g) return;
-    const { w, h, leanX, color } = frameShape(animId, frame, this.baseColor);
+    // Draw a stick figure from the pose: w = stance width (leg spread), h = body
+    // height, leanX = upper-body lean, arm = forward limb extension (strike /
+    // grab / guard), colour = action group. Local space has feet at y=0 and "up"
+    // as -y; +x is "forward" because the view is flipped by facing in update().
+    const { w, h, leanX, color, arm } = poseFor(animId, frame, this.baseColor);
+    const lw = Math.max(4, h * 0.05);
+    const headR = Math.max(7, h * 0.1);
+    const hip = { x: leanX * 0.3, y: -h * 0.42 };
+    const neck = { x: leanX * 0.85, y: -h * 0.82 };
+    const headY = neck.y - headR - 3;
+    const frontFoot = { x: w / 2, y: 0 };
+    const backFoot = { x: -w / 2, y: 0 };
+    // Arm reaches forward when extended, otherwise hangs by the hip.
+    const frontHand =
+      arm > 0 ? { x: neck.x + arm + 6, y: -h * 0.55 } : { x: neck.x + 8, y: -h * 0.14 };
+    const backHand = { x: neck.x - 8, y: -h * 0.16 };
+
     g.clear();
-    g.poly([-w / 2 + leanX, -h, w / 2 + leanX, -h, w / 2 - leanX, 0, -w / 2 - leanX, 0]).fill({
-      color,
-    });
+    g.moveTo(hip.x, hip.y)
+      .lineTo(neck.x, neck.y)
+      .moveTo(hip.x, hip.y)
+      .lineTo(frontFoot.x, frontFoot.y)
+      .moveTo(hip.x, hip.y)
+      .lineTo(backFoot.x, backFoot.y)
+      .moveTo(neck.x, neck.y)
+      .lineTo(frontHand.x, frontHand.y)
+      .moveTo(neck.x, neck.y)
+      .lineTo(backHand.x, backHand.y)
+      .stroke({ width: lw, color, cap: 'round', join: 'round' });
+    g.circle(leanX, headY, headR).fill({ color });
   }
 
   update(prev: Player, curr: Player, alpha: number): void {

@@ -4,7 +4,9 @@ import { parseCharacter } from '../src/engine/schema.ts';
 import {
   Btn,
   createWorld,
+  KO_DELAY,
   ROUND_TIME_TICKS,
+  STAGE_CEILING,
   STAGE_LEFT_X,
   STAGE_RIGHT_X,
 } from '../src/engine/world.ts';
@@ -13,6 +15,19 @@ import baseChar from '../characters/base/character.json' with { type: 'json' };
 
 const characters = { base: parseCharacter(baseChar) };
 const noInput: Inputs = { players: [{ buttons: 0 }, { buttons: 0 }] };
+
+describe('juggle ceiling', () => {
+  test('a fighter cannot rise past STAGE_CEILING even with huge upward velocity', () => {
+    const w = createWorld();
+    const p = w.players[0]!;
+    p.stateId = 'jump'; // physics 'A' (gravity)
+    p.pos.y = 100;
+    p.vel.y = 50; // absurd launch
+    for (let i = 0; i < 60; i++) tick(w, characters, noInput);
+    expect(p.pos.y).toBeLessThanOrEqual(STAGE_CEILING);
+    expect(p.pos.y).toBeGreaterThanOrEqual(0);
+  });
+});
 const p1Right: Inputs = { players: [{ buttons: Btn.Right }, { buttons: 0 }] };
 const p1Left: Inputs = { players: [{ buttons: Btn.Left }, { buttons: 0 }] };
 const p1Up: Inputs = { players: [{ buttons: Btn.Up }, { buttons: 0 }] };
@@ -148,48 +163,54 @@ describe('tick (state-machine driven)', () => {
     expect(w.players[1]!.pos.x).toBeGreaterThan(initialP2X);
   });
 
-  test('KO transitions victim to ko state and ends match', () => {
+  test('KO downs the victim immediately but the result waits out the KO buffer', () => {
     const w = createWorld();
     w.players[0]!.pos.x = 320;
     w.players[1]!.pos.x = 380;
     w.players[1]!.life = 30;
-    for (let i = 0; i < 60; i++) {
-      tick(w, characters, p1Punch);
-      if (w.matchOver) break;
-    }
-    expect(w.matchOver).toBe(true);
-    expect(w.winner).toBe(0);
+    // Land the KO.
+    for (let i = 0; i < 60 && w.players[1]!.stateId !== 'ko'; i++) tick(w, characters, p1Punch);
     expect(w.players[1]!.stateId).toBe('ko');
     expect(w.players[1]!.life).toBe(0);
+    // The result is NOT shown yet — the buffer is running.
+    expect(w.matchOver).toBe(false);
+    expect(w.koCountdown).toBeGreaterThan(0);
+    // Run out the buffer.
+    for (let i = 0; i < KO_DELAY + 5 && !w.matchOver; i++) tick(w, characters, noInput);
+    expect(w.matchOver).toBe(true);
+    expect(w.winner).toBe(0);
   });
 
-  test('after match-over, state machine no longer runs but physics decays', () => {
+  test('a fighter KO’d while airborne falls to the ground during the buffer', () => {
+    const w = createWorld();
+    const v = w.players[1]!;
+    v.life = 0;
+    v.pos.y = 200; // launched
+    v.vel.y = 9;
+    tick(w, characters, noInput); // enters ko + starts buffer
+    expect(v.stateId).toBe('ko');
+    for (let i = 0; i < 80; i++) tick(w, characters, noInput);
+    expect(v.pos.y).toBe(0); // fell to the floor instead of freezing aloft
+  });
+
+  test('after the buffer, the state machine no longer runs', () => {
     const w = createWorld();
     w.players[0]!.pos.x = 320;
     w.players[1]!.pos.x = 380;
     w.players[1]!.life = 30;
-    for (let i = 0; i < 60; i++) {
-      tick(w, characters, p1Punch);
-      if (w.matchOver) break;
-    }
-    const winnerStateId = w.players[0]!.stateId;
-    // Hold p1's punch button after match-over — state should not change to a new attack
-    for (let i = 0; i < 30; i++) {
-      tick(w, characters, p1Punch);
-    }
-    // Whatever state P1 was in at match-over, holding punch shouldn't transition them
-    // out of it (state machine frozen). We only assert that the SM is frozen, not the
-    // exact state, since animation can complete during freeze.
+    for (let i = 0; i < 60 + KO_DELAY + 10 && !w.matchOver; i++) tick(w, characters, p1Punch);
     expect(w.matchOver).toBe(true);
     expect(w.players[1]!.stateId).toBe('ko');
-    expect(typeof winnerStateId).toBe('string');
+    const frozen = w.players[0]!.stateId;
+    for (let i = 0; i < 30; i++) tick(w, characters, p1Punch);
+    expect(w.players[0]!.stateId).toBe(frozen); // SM frozen post-match
   });
 
-  test('match-over with both at zero life is a draw (winner=null)', () => {
+  test('double-KO resolves to a draw after the buffer', () => {
     const w = createWorld();
     w.players[0]!.life = 0;
     w.players[1]!.life = 0;
-    tick(w, characters, noInput);
+    for (let i = 0; i < KO_DELAY + 5 && !w.matchOver; i++) tick(w, characters, noInput);
     expect(w.matchOver).toBe(true);
     expect(w.winner).toBeNull();
   });

@@ -136,6 +136,9 @@ const HitDefSchema = z.object({
   // Pushback applied to a victim who BLOCKS this hit (x is facing-relative, like
   // groundVelocity). Optional; defaults to a scaled groundVelocity at runtime.
   guardVelocity: Vec2Schema.optional(),
+  // Can this attack hit a downed (knocked-down, still-alive) opponent? Only such
+  // attacks connect during OTG; everything else whiffs over a downed victim.
+  canHitDown: z.boolean().optional(),
   priority: z.number().int(),
   fall: z.boolean().optional(),
   sound: z.string().optional(),
