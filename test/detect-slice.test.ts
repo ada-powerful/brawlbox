@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { segmentByGaps } from '../src/creator/image/detectSlice.ts';
+import { segmentByExpected, segmentByGaps } from '../src/creator/image/detectSlice.ts';
 
 // A 1-D content profile: high inside poses, ~0 in the green gaps between them.
 describe('segmentByGaps', () => {
@@ -36,5 +36,31 @@ describe('segmentByGaps', () => {
       [0, 2],
       [2, 4],
     ]);
+  });
+});
+
+describe('segmentByExpected', () => {
+  test('places k boundaries across the content, snapping to the gap', () => {
+    // two poses [2..5) and [7..10) with a green gap at 5,6
+    const p = [0, 0, 9, 9, 9, 0, 0, 9, 9, 9, 0, 0];
+    const segs = segmentByExpected(p, 2);
+    expect(segs.length).toBe(2);
+    expect(segs[0]![0]).toBe(2);
+    expect(segs[1]![1]).toBe(10);
+    expect(segs[0]![1]).toBeGreaterThanOrEqual(5); // boundary lands in the gap
+    expect(segs[0]![1]).toBeLessThanOrEqual(7);
+  });
+
+  test('splits touching poses with no gap evenly at the expected position', () => {
+    const p = [9, 9, 9, 9, 9, 9, 9, 9]; // solid run, k=2 → even split
+    const segs = segmentByExpected(p, 2);
+    expect(segs.length).toBe(2);
+    expect(segs[0]![1]).toBe(segs[1]![0]); // contiguous
+    expect(segs[0]![1]).toBe(4); // middle, not skewed to an edge
+  });
+
+  test('never lumps two poses into one segment (count is exact)', () => {
+    const p = [0, 9, 9, 0, 9, 9, 0, 9, 9, 0];
+    expect(segmentByExpected(p, 3).length).toBe(3);
   });
 });

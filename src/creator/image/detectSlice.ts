@@ -96,6 +96,60 @@ export function segmentByGaps(profile: number[], k: number): Array<[number, numb
   return segs;
 }
 
+/**
+ * Split a 1-D content profile into exactly `k` segments using the KNOWN count as
+ * a strong prior: place `k` evenly-spaced boundaries across the content extent,
+ * then snap each to the deepest nearby valley (the green gap between poses). More
+ * robust than pure gap-finding when poses touch (no gap to find) or carry effects
+ * (spurious gaps): the even prior prevents lumping two poses into one segment or
+ * over-splitting one, while the snap keeps cuts on real gaps. Pure.
+ */
+export function segmentByExpected(profile: number[], k: number): Array<[number, number]> {
+  const n = profile.length;
+  if (k <= 1 || n === 0) return [[0, Math.max(0, n)]];
+
+  let max = 0;
+  for (const v of profile) if (v > max) max = v;
+  const floor = Math.max(1, max * 0.05);
+
+  let lo = 0;
+  while (lo < n && (profile[lo] ?? 0) <= floor) lo++;
+  let hi = n - 1;
+  while (hi > lo && (profile[hi] ?? 0) <= floor) hi--;
+  if (hi <= lo) {
+    const out: Array<[number, number]> = [];
+    for (let i = 0; i < k; i++) out.push([Math.floor((i * n) / k), Math.floor(((i + 1) * n) / k)]);
+    return out;
+  }
+  hi += 1; // make exclusive
+
+  const slot = (hi - lo) / k;
+  const bounds = [lo];
+  for (let i = 1; i < k; i++) {
+    const expected = lo + i * slot;
+    const win = slot * 0.4;
+    const start = Math.max(bounds[bounds.length - 1]! + 1, Math.floor(expected - win));
+    const end = Math.min(hi - 1, Math.ceil(expected + win));
+    // Default to the expected position and only move for a strictly-deeper
+    // valley, so a gapless (solid) region still splits evenly instead of left.
+    let best = Math.min(end, Math.max(start, Math.round(expected)));
+    let bv = profile[best] ?? Infinity;
+    for (let x = start; x <= end; x++) {
+      const v = profile[x] ?? 0;
+      if (v < bv) {
+        bv = v;
+        best = x;
+      }
+    }
+    bounds.push(Math.max(bounds[bounds.length - 1]! + 1, best));
+  }
+  bounds.push(hi);
+
+  const segs: Array<[number, number]> = [];
+  for (let i = 0; i < k; i++) segs.push([bounds[i]!, bounds[i + 1]!]);
+  return segs;
+}
+
 function makeCanvas(w: number, h: number): OffscreenCanvas | HTMLCanvasElement {
   if (typeof OffscreenCanvas !== 'undefined') return new OffscreenCanvas(w, h);
   return Object.assign(document.createElement('canvas'), { width: w, height: h });
@@ -183,7 +237,7 @@ export async function sliceSheetByDetection(
     for (let x = 0; x < W; x++) if (isContent(data, (y * W + x) * 4, bg, diff)) count++;
     rowProfile[y] = count;
   }
-  const bands = segmentByGaps(rowProfile, rowIdx.length);
+  const bands = segmentByExpected(rowProfile, rowIdx.length);
 
   const out: Record<string, Blob> = {};
   for (let ri = 0; ri < rowIdx.length; ri++) {
@@ -199,7 +253,7 @@ export async function sliceSheetByDetection(
       for (let y = y0; y < y1; y++) if (isContent(data, (y * W + x) * 4, bg, diff)) count++;
       colProfile[x] = count;
     }
-    const cols = segmentByGaps(colProfile, rowKeys.length);
+    const cols = segmentByExpected(colProfile, rowKeys.length);
 
     for (let ci = 0; ci < rowKeys.length; ci++) {
       const entry = rowKeys[ci]!;
