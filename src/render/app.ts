@@ -9,6 +9,15 @@ export async function startApp(mount: HTMLElement): Promise<Application> {
     background: '#1a1a1a',
     antialias: false,
   });
+  // The stage renders at a fixed 960x540; scale the canvas to fill its container
+  // width (preserving the 16:9 ratio) so it uses the available space on larger
+  // screens instead of sitting left-aligned at intrinsic size. Pixel art stays
+  // crisp under the upscale via image-rendering.
+  app.canvas.style.width = '100%';
+  app.canvas.style.height = 'auto';
+  app.canvas.style.display = 'block';
+  app.canvas.style.imageRendering = 'pixelated';
+
   mount.appendChild(app.canvas);
   return app;
 }
