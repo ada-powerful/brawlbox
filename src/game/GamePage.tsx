@@ -6,6 +6,7 @@ import type { Character } from '@/engine/schema.ts';
 import { Headshot } from '@/creator/Headshot.tsx';
 import { Match } from '@/game/Match.tsx';
 import type { FighterSpec } from '@/game/mountGame.ts';
+import { CPU_LEVELS, type CpuLevel } from '@/runtime/ai.ts';
 import { BASE_ATLAS_URL, BASE_CHARACTER, P1_COLOR, P2_COLOR } from '@/creator/defaults.ts';
 import { AUTH_ENABLED, CAN_CLOUD } from '@/app/config.ts';
 import { useSession } from '@/app/session.ts';
@@ -42,6 +43,7 @@ export function GamePage() {
 
   const [p1Id, setP1Id] = useState('base');
   const [p2Id, setP2Id] = useState('base');
+  const [cpuLevel, setCpuLevel] = useState<CpuLevel>('normal');
   const [fighting, setFighting] = useState(false);
 
   const entry = (id: string): RosterEntry =>
@@ -66,7 +68,7 @@ export function GamePage() {
           </CardTitle>
           <div className="flex items-center gap-3">
             <span className="text-xs text-muted-foreground">
-              P1: WASD + J/K/L · P2: arrows + numpad · R restart · F1 debug
+              You (P1): WASD + J/K/L · CPU opponent: {cpuLevel} · R restart · F1 debug
             </span>
             <Button variant="secondary" size="sm" onClick={() => setFighting(false)}>
               ← Character select
@@ -75,7 +77,7 @@ export function GamePage() {
         </CardHeader>
         <CardContent>
           {/* Online versus isn't built yet: the human plays P1, the CPU plays P2. */}
-          <Match p1={p1} p2={p2} cpuP2 />
+          <Match p1={p1} p2={p2} cpuP2 cpuLevel={cpuLevel} />
         </CardContent>
       </Card>
     );
@@ -90,11 +92,30 @@ export function GamePage() {
         onSelect={setP1Id}
       />
       <SlotPicker
-        label="Player 2 (blue)"
+        label="Opponent — CPU (blue)"
         roster={roster}
         selectedId={p2Id}
         onSelect={setP2Id}
       />
+
+      <Card>
+        <CardHeader>
+          <CardTitle>CPU difficulty</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-wrap gap-2">
+          {CPU_LEVELS.map((lvl) => (
+            <button
+              key={lvl.id}
+              onClick={() => setCpuLevel(lvl.id)}
+              className={`rounded-md border px-3 py-1 text-sm transition-colors hover:bg-secondary/60 ${
+                cpuLevel === lvl.id ? 'border-primary bg-secondary/60 font-semibold' : 'border-border'
+              }`}
+            >
+              {lvl.label}
+            </button>
+          ))}
+        </CardContent>
+      </Card>
 
       <div className="flex items-center gap-4">
         <Button onClick={() => setFighting(true)}>Fight</Button>

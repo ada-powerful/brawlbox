@@ -13,6 +13,7 @@ import { KFM_TEMPLATE } from './kfmTemplate.ts';
 import { KFM2_CHARACTER, KFM2_ATLAS_URL } from './kfm2.ts';
 import kfmSheetUrl from './kfm-sheet.webp';
 import { hillsideStage } from '../stages/hillside/index.ts';
+import { CPU_LEVELS, type CpuLevel } from '../runtime/ai.ts';
 
 interface Fighter {
   id: string;
@@ -63,9 +64,11 @@ export function Sandbox() {
   const [freezeTimer, setFreezeTimer] = useState(false);
   const [infiniteHealth, setInfiniteHealth] = useState(false);
   // Online-first: the human drives P1 and the CPU drives P2 by default (local
-  // 2-player keyboard isn't a supported control path). Flip to Human to manually
-  // test P2's own moves.
-  const [cpuP2, setCpuP2] = useState(true);
+  // 2-player keyboard isn't a supported control path). 'human' hands P2 back to
+  // the keyboard for manual move testing; the rest are CPU difficulty levels.
+  const [p2Control, setP2Control] = useState<'human' | CpuLevel>('normal');
+  const cpuP2 = p2Control !== 'human';
+  const cpuLevel: CpuLevel = p2Control === 'human' ? 'normal' : p2Control;
   const [status, setStatus] = useState('Baking sheet character…');
   const [error, setError] = useState<string | null>(null);
 
@@ -126,6 +129,7 @@ export function Sandbox() {
         p2: { character: p2.character, atlasUrl: p2.atlasUrl, color: P2_COLOR },
         stage: hillsideStage,
         cpuP2,
+        cpuLevel,
       })
         .then((h) => {
           if (disposed) h.destroy();
@@ -134,6 +138,7 @@ export function Sandbox() {
             h.setFreezeTimer(freezeTimer);
             h.setInfiniteHealth(infiniteHealth);
             h.setCpuP2(cpuP2);
+            h.setCpuLevel(cpuLevel);
           }
         })
         .catch((e) => setError(`Mount failed: ${(e as Error).message}`));
@@ -156,14 +161,14 @@ export function Sandbox() {
     handleRef.current?.setFreezeTimer(freezeTimer);
     handleRef.current?.setInfiniteHealth(infiniteHealth);
     handleRef.current?.setCpuP2(cpuP2);
+    handleRef.current?.setCpuLevel(cpuLevel);
     const onKey = (e: KeyboardEvent): void => {
       if (e.code === 'KeyT') setFreezeTimer((v) => !v);
       else if (e.code === 'KeyH') setInfiniteHealth((v) => !v);
-      else if (e.code === 'KeyC') setCpuP2((v) => !v);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [freezeTimer, infiniteHealth, cpuP2, mode]);
+  }, [freezeTimer, infiniteHealth, cpuP2, cpuLevel, mode]);
 
   // Gallery keyboard controls: ←/→ step, space play/pause.
   useEffect(() => {
@@ -270,19 +275,21 @@ export function Sandbox() {
             >
               {infiniteHealth ? 'HP infinite (H)' : 'Infinite HP (H)'}
             </button>
-            <button
-              onClick={() => setCpuP2((v) => !v)}
-              style={{
-                padding: '4px 10px',
-                borderRadius: 6,
-                background: cpuP2 ? '#2e3a4e' : '#26262e',
-                color: '#eee',
-                border: `1px solid ${cpuP2 ? '#4a5a7a' : '#333'}`,
-                cursor: 'pointer',
-              }}
-            >
-              {cpuP2 ? 'P2: CPU (C)' : 'P2: Human (C)'}
-            </button>
+            <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 13 }}>
+              <span style={{ color: '#55aaff' }}>P2 ctrl</span>
+              <select
+                value={p2Control}
+                onChange={(e) => setP2Control(e.target.value as 'human' | CpuLevel)}
+                style={{ padding: '4px 8px', borderRadius: 6, background: '#1c1c22', color: '#eee', border: '1px solid #333' }}
+              >
+                <option value="human">Human (keyboard)</option>
+                {CPU_LEVELS.map((lvl) => (
+                  <option key={lvl.id} value={lvl.id}>
+                    CPU · {lvl.label}
+                  </option>
+                ))}
+              </select>
+            </label>
           </>
         ) : (
           <>

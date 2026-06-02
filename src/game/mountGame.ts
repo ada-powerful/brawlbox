@@ -7,7 +7,7 @@ import { tick } from '../engine/tick.ts';
 import { createWorld, GROUND_Y_SCREEN, STAGE_WIDTH, type World } from '../engine/world.ts';
 import { lerp } from '../engine/vec.ts';
 import { pollInputs, startKeyboard } from '../input/keyboard.ts';
-import { cpuInput } from '../runtime/ai.ts';
+import { cpuInput, type CpuLevel } from '../runtime/ai.ts';
 import { startApp } from '../render/app.ts';
 import { DebugOverlay } from '../render/debug.ts';
 import { FighterRenderer } from '../render/fighter.ts';
@@ -46,6 +46,8 @@ export interface MountOptions {
    * plays P2. Toggleable live via the handle's `setCpuP2`.
    */
   cpuP2?: boolean;
+  /** CPU difficulty (default 'normal'). Live-settable via `setCpuLevel`. */
+  cpuLevel?: CpuLevel;
 }
 
 export interface GameHandle {
@@ -57,6 +59,8 @@ export interface GameHandle {
   setInfiniteHealth: (on: boolean) => void;
   /** Drive P2 with the built-in CPU (true) or with keyboard/gamepad input (false). */
   setCpuP2: (on: boolean) => void;
+  /** Set the CPU difficulty level. */
+  setCpuLevel: (level: CpuLevel) => void;
   destroy: () => void;
 }
 
@@ -118,6 +122,7 @@ function updateCameraFn(camera: Container): (prev: World, curr: World, alpha: nu
 export async function mountGame(mount: HTMLElement, opts: MountOptions): Promise<GameHandle> {
   const { p1, p2, unlimited = false, stage } = opts;
   let cpuP2 = opts.cpuP2 ?? false;
+  let cpuLevel: CpuLevel = opts.cpuLevel ?? 'normal';
   for (const f of [p1, p2]) assertAtlasCoverage(f.character);
 
   // Engine character registry keyed by id. Distinct ids => both registered.
@@ -180,7 +185,7 @@ export async function mountGame(mount: HTMLElement, opts: MountOptions): Promise
       // for this tick (P1 stays human). Done here, outside the pure tick, so the
       // engine still just consumes an Inputs struct.
       if (cpuP2) {
-        inp = { players: [inp.players[0] ?? { buttons: 0 }, { buttons: cpuInput(w, characters, 1) }] };
+        inp = { players: [inp.players[0] ?? { buttons: 0 }, { buttons: cpuInput(w, characters, 1, cpuLevel) }] };
       }
       const before = w.roundTime;
       // Snapshot life before the tick so showcase mode can pin it back, keeping
@@ -233,6 +238,9 @@ export async function mountGame(mount: HTMLElement, opts: MountOptions): Promise
     },
     setCpuP2: (on: boolean) => {
       cpuP2 = on;
+    },
+    setCpuLevel: (level: CpuLevel) => {
+      cpuLevel = level;
     },
     destroy: () => {
       handle.stop();

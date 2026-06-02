@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { mountGame, type FighterSpec, type GameHandle } from '@/game/mountGame.ts';
+import type { CpuLevel } from '@/runtime/ai.ts';
 
 /**
  * Mounts a live match between two fighters into a Pixi canvas. The reusable core
@@ -11,6 +12,7 @@ export function Match({
   p2,
   unlimited = false,
   cpuP2 = false,
+  cpuLevel = 'normal',
 }: {
   p1: FighterSpec;
   p2: FighterSpec;
@@ -18,6 +20,8 @@ export function Match({
   unlimited?: boolean;
   /** Drive P2 with the built-in CPU (online-first stand-in for a second human). */
   cpuP2?: boolean;
+  /** CPU difficulty when `cpuP2` is on. */
+  cpuLevel?: CpuLevel;
 }) {
   const ref = useRef<HTMLDivElement>(null);
 
@@ -35,7 +39,7 @@ export function Match({
         ? { ...p2, character: { ...p2.character, meta: { ...p2.character.meta, id: `${p2.character.meta.id}-opp` } } }
         : p2;
 
-    mountGame(mount, { p1, p2: p2Spec, unlimited, cpuP2 })
+    mountGame(mount, { p1, p2: p2Spec, unlimited, cpuP2, cpuLevel })
       .then((h) => {
         if (disposed) h.destroy();
         else handle = h;
@@ -46,7 +50,7 @@ export function Match({
       disposed = true;
       handle?.destroy();
     };
-  }, [p1.character, p1.atlasUrl, p1.color, p2.character, p2.atlasUrl, p2.color, unlimited, cpuP2]);
+  }, [p1.character, p1.atlasUrl, p1.color, p2.character, p2.atlasUrl, p2.color, unlimited, cpuP2, cpuLevel]);
 
   return <div ref={ref} className="overflow-hidden rounded-lg border" />;
 }
