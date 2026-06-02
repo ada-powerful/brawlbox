@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button.tsx';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card.tsx';
 import { Input } from '@/components/ui/input.tsx';
@@ -9,15 +10,7 @@ import { generateCharacter } from '@/ai/llm.ts';
 import { createOpenAIProvider } from '@/ai/openai.ts';
 import { generateCharacterViaBackend } from '@/ai/backend.ts';
 import { fetchSheetAndDetect, cropSelection, type DetectedSheet } from '@/ai/spritesBackend.ts';
-import {
-  isAuthEnabled,
-  handleRedirectCallback,
-  getAccessToken,
-  login,
-  logout,
-  userEmail,
-} from '@/auth/auth.ts';
-import type { User } from 'oidc-client-ts';
+import { getAccessToken, login } from '@/auth/auth.ts';
 import { CHROMA, defaultBackgroundForModel, generateCharacterSprites } from '@/ai/image.ts';
 import { clearKey, getEnvKey, getKey, setKey } from '@/ai/keystore.ts';
 import { applySpritesToCharacter } from '@/creator/image/pack.ts';
@@ -27,15 +20,15 @@ import { Playtest } from '@/creator/Playtest.tsx';
 import { Headshot } from '@/creator/Headshot.tsx';
 import { FrameReview } from '@/creator/FrameReview.tsx';
 import {
-  listCloudCharacters,
   saveCloudCharacter,
   deleteCloudCharacter,
   renameCloudCharacter,
   archiveCloudCharacter,
   shareCloudCharacter,
-  listGallery,
   type CloudCharacter,
 } from '@/creator/store/cloud.ts';
+import { API_BASE, AUTH_ENABLED, BACKEND_MODE, CAN_CLOUD } from '@/app/config.ts';
+import { useSession } from '@/app/session.ts';
 
 const EXAMPLE = 'a stone golem brawler with a slow, heavy uppercut and lots of health';
 
@@ -49,16 +42,13 @@ const withUniqueId = (c: Character): Character => ({
 
 // A key from .env (if any) takes over — the manual key card is then hidden.
 const ENV_KEY = getEnvKey();
-// When set, character generation goes through the BrawlBox backend (key lives
-// server-side) instead of BYOK. Sprite generation is still BYOK for now.
-const API_BASE = (import.meta.env?.VITE_API_BASE_URL as string | undefined)?.replace(/\/+$/, '');
-const BACKEND_MODE = !!API_BASE;
-// When auth is configured, backend generation requires a signed-in user.
-const AUTH_ENABLED = isAuthEnabled();
 // Image model; the project validated gpt-image-2. Override with VITE_IMAGE_MODEL.
 const IMAGE_MODEL = (import.meta.env?.VITE_IMAGE_MODEL as string | undefined) || 'gpt-image-2';
 
-export function App() {
+export function CreatorPage() {
+  // Shared session (auth + saved characters + gallery) from the layout.
+  const { user, saved, savedError, refreshSaved, gallery, refreshGallery } = useSession();
+
   const [apiKey, setApiKey] = useState('');
   const [remember, setRemember] = useState(false);
   const [prompt, setPrompt] = useState(EXAMPLE);
@@ -73,11 +63,7 @@ export function App() {
   const [playerSide, setPlayerSide] = useState<'p1' | 'p2'>('p2');
   const [json, setJson] = useState('');
   const [model, setModel] = useState(IMAGE_MODEL);
-  const [user, setUser] = useState<User | null>(null);
-  const [saved, setSaved] = useState<CloudCharacter[]>([]);
-  const [savedError, setSavedError] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
-  const [gallery, setGallery] = useState<CloudCharacter[]>([]);
   const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null);
   const [showArchived, setShowArchived] = useState(false);
   // M2.3 frame-review: the retextured sheet (backend path) + the editable
@@ -89,48 +75,7 @@ export function App() {
   const cancelRenameRef = useRef(false);
 
   // Cloud storage is available when signed in to the backend.
-  const canCloud = BACKEND_MODE && AUTH_ENABLED && !!API_BASE;
-
-  // Complete any hosted-UI redirect (?code=) and load the current session.
-  useEffect(() => {
-    if (AUTH_ENABLED) void handleRedirectCallback().then(setUser);
-  }, []);
-
-  const refreshSaved = async (): Promise<void> => {
-    if (!canCloud || !user || !API_BASE) return;
-    try {
-      const token = await getAccessToken();
-      if (token) {
-        setSaved(await listCloudCharacters(API_BASE, token));
-        setSavedError(null);
-      }
-    } catch (e) {
-      // Surface the failure: an empty list and a load error look identical to
-      // the user otherwise, hiding real backend/auth problems.
-      setSavedError(`Couldn't load your saved characters (${(e as Error).message}).`);
-    }
-  };
-
-  // Reload the user's saved characters whenever the session changes.
-  useEffect(() => {
-    void refreshSaved();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user]);
-
-  const refreshGallery = async (): Promise<void> => {
-    if (!BACKEND_MODE || !API_BASE) return;
-    try {
-      setGallery(await listGallery(API_BASE)); // public — no token needed
-    } catch {
-      /* non-fatal */
-    }
-  };
-
-  // Load the public gallery once on mount.
-  useEffect(() => {
-    void refreshGallery();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const canCloud = CAN_CLOUD;
 
   // Backend generation needs a signed-in user when auth is on. Returns the
   // access token, or triggers login (redirect) and returns undefined to abort.
@@ -438,34 +383,14 @@ export function App() {
   const archivedSaved = saved.filter((c) => c.archived);
 
   return (
-    <div className="mx-auto flex min-h-screen max-w-[1400px] flex-col gap-4 p-4">
-      <header className="flex items-baseline justify-between">
-        <h1 className="text-xl font-semibold tracking-tight">
-          BrawlBox <span className="text-muted-foreground">character creator</span>
-        </h1>
-        <div className="flex items-center gap-3">
-          <span className="text-xs text-muted-foreground">
-            {ENV_KEY
-              ? 'key loaded from .env'
-              : BACKEND_MODE
-                ? 'generation via BrawlBox API'
-                : 'M2.2 — AI sprite generation'}
-          </span>
-          {AUTH_ENABLED &&
-            (user ? (
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground">{userEmail(user)}</span>
-                <Button variant="secondary" size="sm" onClick={() => void logout()}>
-                  Sign out
-                </Button>
-              </div>
-            ) : (
-              <Button size="sm" onClick={() => void login()}>
-                Sign in
-              </Button>
-            ))}
-        </div>
-      </header>
+    <>
+      <p className="text-sm text-muted-foreground">
+        Describe a fighter and generate it, or{' '}
+        <Link to="/play" className="text-primary hover:underline">
+          skip and play with the built-in characters
+        </Link>
+        .
+      </p>
 
       <div className="grid flex-1 grid-cols-1 gap-4 lg:grid-cols-[420px_1fr]">
         {/* Controls */}
@@ -770,6 +695,6 @@ export function App() {
           </CardContent>
         </Card>
       )}
-    </div>
+    </>
   );
 }

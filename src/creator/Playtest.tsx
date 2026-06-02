@@ -1,6 +1,6 @@
-import { useEffect, useRef } from 'react';
 import type { Character } from '@/engine/schema.ts';
-import { mountGame, type GameHandle } from '@/game/mountGame.ts';
+import type { FighterSpec } from '@/game/mountGame.ts';
+import { Match } from '@/game/Match.tsx';
 import { BASE_ATLAS_URL, BASE_CHARACTER, P1_COLOR, P2_COLOR } from '@/creator/defaults.ts';
 
 /**
@@ -19,45 +19,19 @@ export function Playtest({
   atlasUrl?: string;
   side?: 'p1' | 'p2';
 }) {
-  const ref = useRef<HTMLDivElement>(null);
+  const fighter: FighterSpec = {
+    character: character ?? BASE_CHARACTER,
+    atlasUrl: character ? atlasUrl : BASE_ATLAS_URL,
+    color: side === 'p1' ? P1_COLOR : P2_COLOR,
+  };
+  const base: FighterSpec = {
+    character: BASE_CHARACTER,
+    atlasUrl: BASE_ATLAS_URL,
+    color: side === 'p1' ? P2_COLOR : P1_COLOR,
+  };
 
-  useEffect(() => {
-    const mount = ref.current;
-    if (!mount) return;
+  // The chosen fighter takes `side`; the base stands in for the other slot.
+  const [p1, p2] = side === 'p1' ? [fighter, base] : [base, fighter];
 
-    let handle: GameHandle | null = null;
-    let disposed = false;
-
-    // Guarantee the fighter's id differs from the base ('base'), else the engine
-    // registry collides when they share a slot pairing.
-    const fighter: Character = character
-      ? character.meta.id === BASE_CHARACTER.meta.id
-        ? { ...character, meta: { ...character.meta, id: `${character.meta.id}-opp` } }
-        : character
-      : BASE_CHARACTER;
-
-    const fighterSpec = { character: fighter, atlasUrl: character ? atlasUrl : BASE_ATLAS_URL };
-    const baseSpec = { character: BASE_CHARACTER, atlasUrl: BASE_ATLAS_URL };
-
-    // The chosen fighter takes `side`; the base stands in for the other slot.
-    // Colors stay tied to the slot so they line up with the control hints.
-    const [p1, p2] =
-      side === 'p1'
-        ? [{ ...fighterSpec, color: P1_COLOR }, { ...baseSpec, color: P2_COLOR }]
-        : [{ ...baseSpec, color: P1_COLOR }, { ...fighterSpec, color: P2_COLOR }];
-
-    mountGame(mount, { p1, p2 })
-      .then((h) => {
-        if (disposed) h.destroy();
-        else handle = h;
-      })
-      .catch((e) => console.error('playtest mount failed', e));
-
-    return () => {
-      disposed = true;
-      handle?.destroy();
-    };
-  }, [character, atlasUrl, side]);
-
-  return <div ref={ref} className="overflow-hidden rounded-lg border" />;
+  return <Match p1={p1} p2={p2} />;
 }
