@@ -83,8 +83,6 @@ export function CreatorPage() {
   const [status, setStatus] = useState<string | null>(null);
   const [character, setCharacter] = useState<Character | null>(null);
   const [atlasUrl, setAtlasUrl] = useState<string | undefined>(undefined);
-  // Which slot the user's fighter occupies in the playtest (default P2).
-  const [playerSide, setPlayerSide] = useState<'p1' | 'p2'>('p2');
   const [json, setJson] = useState('');
   const [model, setModel] = useState(IMAGE_MODEL);
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
@@ -829,29 +827,11 @@ export function CreatorPage() {
             </span>
           </CardHeader>
           <CardContent>
-            <div className="mb-2 flex items-center gap-2">
-              <span className="text-xs text-muted-foreground">Play your fighter as</span>
-              <div className="flex gap-1">
-                <Button
-                  size="sm"
-                  variant={playerSide === 'p1' ? 'default' : 'outline'}
-                  onClick={() => setPlayerSide('p1')}
-                >
-                  P1
-                </Button>
-                <Button
-                  size="sm"
-                  variant={playerSide === 'p2' ? 'default' : 'outline'}
-                  onClick={() => setPlayerSide('p2')}
-                >
-                  P2
-                </Button>
-              </div>
-            </div>
-            <Playtest character={character} atlasUrl={atlasUrl} side={playerSide} />
+            <Playtest character={character} atlasUrl={atlasUrl} />
             <p className="mt-2 text-xs text-muted-foreground">
-              Pink = {playerSide === 'p1' && character ? 'your fighter' : 'base'} (P1). Blue ={' '}
-              {playerSide === 'p2' && character ? 'your fighter' : 'base'} (P2).
+              Both fighters are {character ? 'your character' : 'the base fighter'}. Pink (P1) is
+              the one you control; blue (P2) stands as an idle dummy so you can watch your
+              fighter take hits — react, dizzy, faint — while you attack.
               {character &&
                 !hasSprites &&
                 ' Renders as a silhouette until you generate sprites (step 2).'}
