@@ -33,6 +33,7 @@ import {
 } from '@/creator/templates.ts';
 import type { Character } from '@/engine/schema.ts';
 import { Playtest } from '@/creator/Playtest.tsx';
+import { ControlsMap } from '@/creator/ControlsMap.tsx';
 import { Headshot } from '@/creator/Headshot.tsx';
 import { FrameReview } from '@/creator/FrameReview.tsx';
 import { AttributesForm } from '@/creator/AttributesForm.tsx';
@@ -76,7 +77,7 @@ const IMAGE_MODEL = (import.meta.env?.VITE_IMAGE_MODEL as string | undefined) ||
 // The two generation flows are genuinely different processes, so the UI splits
 // them up front rather than inferring from "did you upload a photo?".
 type Mode = 'attributes' | 'photo';
-type RightTab = 'playtest' | 'attributes' | 'portraits';
+type RightTab = 'playtest' | 'controls' | 'attributes' | 'portraits';
 
 // Assemble a portrait set from a loaded character's presigned URLs, or null when
 // the record has no saved portraits.
@@ -1131,6 +1132,7 @@ export function CreatorPage() {
               {(
                 [
                   ['playtest', 'Playtest'],
+                  ['controls', 'Controls'],
                   ['attributes', 'Attributes'],
                   ['portraits', 'Portraits'],
                 ] as const
@@ -1168,6 +1170,8 @@ export function CreatorPage() {
                 </p>
               </>
             )}
+
+            {rightTab === 'controls' && <ControlsMap character={character} atlasUrl={atlasUrl} />}
 
             {rightTab === 'attributes' &&
               (character ? (
