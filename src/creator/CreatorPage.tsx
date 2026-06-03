@@ -36,6 +36,14 @@ import { Playtest } from '@/creator/Playtest.tsx';
 import { Headshot } from '@/creator/Headshot.tsx';
 import { FrameReview } from '@/creator/FrameReview.tsx';
 import { AttributesForm } from '@/creator/AttributesForm.tsx';
+import { AttributePicker } from '@/creator/AttributePicker.tsx';
+import {
+  applyAttributes as applyAttributeStats,
+  attributesToDescription,
+  attributesToName,
+  DEFAULT_ATTRIBUTES,
+  type Attributes,
+} from '@/creator/attributes.ts';
 import { IdlePreview } from '@/creator/IdlePreview.tsx';
 import { P1_COLOR } from '@/creator/defaults.ts';
 import {
@@ -67,7 +75,7 @@ const IMAGE_MODEL = (import.meta.env?.VITE_IMAGE_MODEL as string | undefined) ||
 
 // The two generation flows are genuinely different processes, so the UI splits
 // them up front rather than inferring from "did you upload a photo?".
-type Mode = 'prompt' | 'photo';
+type Mode = 'attributes' | 'photo';
 type RightTab = 'playtest' | 'attributes' | 'portraits';
 
 // Assemble a portrait set from a loaded character's presigned URLs, or null when
@@ -87,7 +95,9 @@ export function CreatorPage() {
   const [remember, setRemember] = useState(false);
   // How the next fighter is created: from a text prompt, or from a reference
   // photo (separate flows with different steps — see the controls below).
-  const [mode, setMode] = useState<Mode>('prompt');
+  const [mode, setMode] = useState<Mode>('attributes');
+  // Structured builder inputs (sex / body / physique / style) for "From attributes".
+  const [attrs, setAttrs] = useState<Attributes>(DEFAULT_ATTRIBUTES);
   // Which template the new fighter is built from. A real template reuses its
   // base character's gameplay and only re-skins the art (NB2); FREEFORM_ID keeps
   // the legacy "AI designs a brand-new character" path.
@@ -190,13 +200,12 @@ export function CreatorPage() {
     if (next === mode) return;
     setMode(next);
     setError(null);
-    if (next === 'prompt') {
-      // Drop the photo + anything derived from it.
+    if (next === 'attributes') {
+      // Attributes define the fighter — drop the photo + anything derived from it.
       setRefImage(null);
       setPortraits(null);
       setPortraitKeys(null);
       setImageDescription(null);
-      if (!prompt.trim()) setPrompt(EXAMPLE);
     } else {
       // Photo drives the look; clear the example prompt so the notes box is empty.
       if (prompt === EXAMPLE) setPrompt('');
@@ -265,7 +274,14 @@ export function CreatorPage() {
   const createFromTemplate = async (tpl: CharacterTemplate): Promise<void> => {
     let name = prompt.trim().slice(0, 48) || tpl.label;
     let described: string | null = null;
-    if (refImage && BACKEND_MODE && API_BASE) {
+    // Attributes mode: stats + size + art all come from the chosen attributes.
+    let base: Character = tpl.base;
+    if (mode === 'attributes') {
+      base = applyAttributeStats(tpl.base, attrs);
+      name = attributesToName(attrs);
+      described = attributesToDescription(attrs);
+    } else if (refImage && BACKEND_MODE && API_BASE) {
+      // Photo mode: gpt-5.5 names + describes the character from the image.
       const token = await ensureToken();
       if (token === undefined) return; // redirecting to sign in
       setStatus('Reading your photo…');
@@ -280,9 +296,9 @@ export function CreatorPage() {
     }
     setImageDescription(described);
     const newChar = withUniqueId({
-      ...tpl.base,
+      ...base,
       spriteAtlas: undefined,
-      meta: { ...tpl.base.meta, name },
+      meta: { ...base.meta, name },
     });
     swapAtlasUrl(undefined); // new config => drop old sprites
     setSheet(null); // and the old review sheet
@@ -301,11 +317,7 @@ export function CreatorPage() {
     // Validate per the active flow: a prompt is required in prompt mode, a photo
     // in photo mode.
     if (mode === 'photo' && !refImage) {
-      setError('Upload a reference photo, or switch to “From a prompt”.');
-      return;
-    }
-    if (mode === 'prompt' && !prompt.trim()) {
-      setError('Describe your fighter.');
+      setError('Upload a reference photo, or switch to “From attributes”.');
       return;
     }
     // A brand-new fighter; clear any previous portrait set so it can't carry over.
@@ -335,8 +347,9 @@ export function CreatorPage() {
     try {
       // A reference photo can drive a freeform design too: describe it first so
       // the LLM gets an appearance prompt even when the notes box is left empty.
-      let designPrompt = prompt.trim();
-      if (refImage && BACKEND_MODE && API_BASE) {
+      // In attributes mode the structured choices become the design prompt.
+      let designPrompt = mode === 'attributes' ? attributesToDescription(attrs) : prompt.trim();
+      if (mode === 'photo' && refImage && BACKEND_MODE && API_BASE) {
         setStatus('Reading your photo…');
         try {
           const idea = await describeFromImage(API_BASE, refImage, prompt.trim(), token);
@@ -731,7 +744,7 @@ export function CreatorPage() {
               <div className="grid grid-cols-2 gap-1 rounded-md bg-secondary/50 p-1">
                 {(
                   [
-                    ['prompt', 'From a prompt'],
+                    ['attributes', 'From attributes'],
                     ['photo', 'From a photo'],
                   ] as const
                 ).map(([m, label]) => (
@@ -771,25 +784,10 @@ export function CreatorPage() {
                 {template && <p className="text-xs text-muted-foreground">{template.hint}</p>}
               </div>
 
-              {/* Prompt mode: the description IS the input. Photo mode: notes are
-                  optional and steer the look extracted from the photo. */}
+              {/* Attributes mode: structured choices define the fighter (stats +
+                  art). Photo mode: notes are optional and steer the look. */}
               {!photoMode ? (
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="prompt" className="text-muted-foreground">
-                    Describe your fighter
-                  </Label>
-                  <Textarea
-                    id="prompt"
-                    rows={4}
-                    value={prompt}
-                    onChange={(e) => setPrompt(e.target.value)}
-                    placeholder={
-                      template
-                        ? 'Describe how your fighter LOOKS — e.g. a grizzled ronin in red lacquered armor'
-                        : EXAMPLE
-                    }
-                  />
-                </div>
+                <AttributePicker attrs={attrs} onChange={setAttrs} disabled={busy || imgBusy} />
               ) : (
                 <>
                   <div
