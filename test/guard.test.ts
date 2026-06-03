@@ -111,7 +111,13 @@ describe('move-contact flags', () => {
   test('moveHit / moveGuarded / moveContact read the player state', () => {
     const w = createWorld();
     const p = w.players[0]!;
-    const c = { world: w, player: p, inputs: { players: [{ buttons: 0 }, { buttons: 0 }] }, playerIndex: 0, character };
+    const c = {
+      world: w,
+      player: p,
+      inputs: { players: [{ buttons: 0 }, { buttons: 0 }] },
+      playerIndex: 0,
+      character,
+    };
 
     p.moveHit = true;
     expect(evalTrigger({ op: 'flag', name: 'moveHit' }, c)).toBe(true);

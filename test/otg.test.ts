@@ -7,7 +7,16 @@ import { createWorld, MAX_OTG, type World } from '../src/engine/world.ts';
 // Minimal character with a downed (type L, moveType H) state + a get-up state.
 const char = parseCharacter({
   meta: { id: 'otg', name: 'o', author: 'a', version: '0' },
-  data: { life: 1000, attack: 100, defence: 100, walkFwd: 3, walkBack: -2, jumpVel: { x: 0, y: 9 }, gravity: 0.5, groundFriction: 0.85 },
+  data: {
+    life: 1000,
+    attack: 100,
+    defence: 100,
+    walkFwd: 3,
+    walkBack: -2,
+    jumpVel: { x: 0, y: 9 },
+    gravity: 0.5,
+    groundFriction: 0.85,
+  },
   size: { width: 60, height: 100, headY: 90 },
   states: {
     stand: { type: 'S', moveType: 'I', physics: 'S', controllers: [] },
@@ -16,9 +25,25 @@ const char = parseCharacter({
     getup: { type: 'C', moveType: 'I', physics: 'S', anim: 'gu', controllers: [] },
   },
   animations: {
-    atk: { loop: false, frames: [{ sprite: 's', duration: -1, hurtboxes: [{ x: -20, y: 0, w: 40, h: 100 }], hitboxes: [{ x: 0, y: 0, w: 90, h: 60 }] }] },
-    kd: { loop: false, frames: [{ sprite: 's', duration: -1, hurtboxes: [{ x: -40, y: 0, w: 80, h: 24 }] }] },
-    gu: { loop: false, frames: [{ sprite: 's', duration: -1, hurtboxes: [{ x: -20, y: 0, w: 40, h: 90 }] }] },
+    atk: {
+      loop: false,
+      frames: [
+        {
+          sprite: 's',
+          duration: -1,
+          hurtboxes: [{ x: -20, y: 0, w: 40, h: 100 }],
+          hitboxes: [{ x: 0, y: 0, w: 90, h: 60 }],
+        },
+      ],
+    },
+    kd: {
+      loop: false,
+      frames: [{ sprite: 's', duration: -1, hurtboxes: [{ x: -40, y: 0, w: 80, h: 24 }] }],
+    },
+    gu: {
+      loop: false,
+      frames: [{ sprite: 's', duration: -1, hurtboxes: [{ x: -20, y: 0, w: 40, h: 90 }] }],
+    },
   },
 });
 const characters = { otg: char };

@@ -46,7 +46,8 @@ export function detectThrows(world: World): ThrowEvent[] {
       const forward = (victim.pos.x - attacker.pos.x) * attacker.facing;
       if (forward < 0) continue;
 
-      const bodyDist = Math.abs(victim.pos.x - attacker.pos.x) - attacker.halfWidth - victim.halfWidth;
+      const bodyDist =
+        Math.abs(victim.pos.x - attacker.pos.x) - attacker.halfWidth - victim.halfWidth;
       const heightDelta = Math.abs(victim.pos.y - attacker.pos.y);
       if (bodyDist <= def.range.x && heightDelta <= def.range.y) {
         events.push({ attackerIdx: i, victimIdx: j });
@@ -91,7 +92,11 @@ export function applyThrows(
     victim.activeHitDef = null;
     victim.activeThrow = null;
     // Show a "held" pose if the victim defines one; otherwise a flinch.
-    const heldState = vChar.states['thrown'] ? 'thrown' : vChar.states['hit.stand'] ? 'hit.stand' : null;
+    const heldState = vChar.states['thrown']
+      ? 'thrown'
+      : vChar.states['hit.stand']
+        ? 'hit.stand'
+        : null;
     if (heldState) {
       victim.stateId = heldState;
       victim.stateTime = 0;

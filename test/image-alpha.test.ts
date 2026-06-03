@@ -40,8 +40,14 @@ describe('isGreenScreen', () => {
 describe('keyOutGreenScreen', () => {
   test('clears green-dominant pixels and leaves the character opaque', () => {
     const data = new Uint8ClampedArray([
-      96, 168, 48, 255, // olive backdrop
-      210, 170, 130, 255, // skin
+      96,
+      168,
+      48,
+      255, // olive backdrop
+      210,
+      170,
+      130,
+      255, // skin
     ]);
     keyOutGreenScreen(data);
     expect(data[3]).toBe(0); // backdrop cut out

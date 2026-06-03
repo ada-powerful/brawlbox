@@ -26,7 +26,11 @@ describe('parseCharacter', () => {
           moveType: 'I',
           physics: 'N',
           controllers: [
-            { type: 'VelSet', xForward: 8, trigger: { op: 'eq', left: { ref: 'time' }, right: { const: 0 } } },
+            {
+              type: 'VelSet',
+              xForward: 8,
+              trigger: { op: 'eq', left: { ref: 'time' }, right: { const: 0 } },
+            },
             { type: 'VelAdd', xForward: 2, trigger: { op: 'flag', name: 'ctrl' } },
           ],
         },

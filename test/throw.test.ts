@@ -79,7 +79,13 @@ describe('detectThrows', () => {
     a.pos.x = 360;
     const v = w.players[1]!;
     v.pos.x = 420;
-    v.bind = { thrower: 0, time: 5, pos: { x: 55, y: 0 }, releaseVel: { x: 6, y: 8 }, releaseState: 'hit.air' };
+    v.bind = {
+      thrower: 0,
+      time: 5,
+      pos: { x: 55, y: 0 },
+      releaseVel: { x: 6, y: 8 },
+      releaseState: 'hit.air',
+    };
     expect(detectThrows(w)).toEqual([]);
   });
 });
@@ -130,7 +136,13 @@ describe('applyBinds', () => {
     thrower.pos.x = 360;
     thrower.facing = 1;
     thrower.ctrl = false; // thrower is mid-throw (its throw state is ctrl: 0)
-    v.bind = { thrower: 0, time, pos: { x: 55, y: 0 }, releaseVel: { x: 6, y: 8 }, releaseState: 'hit.air' };
+    v.bind = {
+      thrower: 0,
+      time,
+      pos: { x: 55, y: 0 },
+      releaseVel: { x: 6, y: 8 },
+      releaseState: 'hit.air',
+    };
     v.ctrl = false;
     return { w, thrower, v };
   }
@@ -235,7 +247,13 @@ describe('throws vs strikes', () => {
     a.activeHitDef = punch;
     a.pos.x = 360;
     v.pos.x = 400;
-    v.bind = { thrower: 1, time: 5, pos: { x: 55, y: 0 }, releaseVel: { x: 6, y: 8 }, releaseState: 'hit.air' };
+    v.bind = {
+      thrower: 1,
+      time: 5,
+      pos: { x: 55, y: 0 },
+      releaseVel: { x: 6, y: 8 },
+      releaseState: 'hit.air',
+    };
     expect(detectHits(w, characters)).toEqual([]);
   });
 });

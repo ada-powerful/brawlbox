@@ -1,6 +1,8 @@
-# ftg — browser MUGEN engine
+# BrawlBox — browser MUGEN engine
 
-Browser-native 2D fighting game engine with a JSON-native character format. Phase 1 engine is complete; phase 2 (AI-assisted character creator) is the next sprint. See `PHASE_1_PLAN.md` for the full design.
+> Title was "ftg" — same project, renamed to BrawlBox. Lives in `brawlbox-web`.
+
+Browser-native 2D fighting game engine with a JSON-native character format. Phase 1 (core engine) is complete and has since been **extended well past its original scope** — throws, guard/blocking, charge & held motions, power meter, opponent triggers, dizzy/stun, knockdowns/OTG, and launch/KO flow all shipped (the moveset-gap rounds; see `MOVESET_GAP_DESIGN.md`). Phase 2 (AI-assisted character creator) is mid-build. See `PHASE_1_PLAN.md` / `PHASE_2_PLAN.md` for the original designs.
 
 ## Run commands
 
@@ -20,14 +22,25 @@ CI (`.github/workflows/ci.yml`) runs `typecheck`, `test`, and `build` on every p
 ```
 src/
   engine/    ← PURE simulation. No pixi / DOM / window imports anywhere.
-  render/    ← Pixi-side, reads World, never mutates it.
+               tick.ts orchestrates; commands, hitDef, throw, collision,
+               stateMachine, triggers, world, schema, serialize.
+  render/    ← Pixi-side, reads World, never mutates it. fighter.ts (atlas +
+               procedural poses), poses.ts (canonical action vocabulary).
   input/     ← keyboard + gamepad polling.
-  runtime/   ← rAF loop + accumulator + interpolation.
-characters/  ← hand-authored character JSON + atlas (phase 2 lands real assets).
+  runtime/   ← rAF loop + accumulator + interpolation; ai.ts (CPU P2, input-layer).
+  game/      ← mountGame (the playable page) + mountGallery (action gallery).
+  sandbox/   ← backend-free local test harness; KFM + Honda demo characters + templates.
+  stages/    ← render-only parallax stage backgrounds (e.g. hillside).
+  creator/   ← React creator UI (prompt → character, sprite gen, playtest).
+  ai/        ← LLM / image / fal provider clients (now mostly behind the backend proxy).
+characters/  ← hand-authored character JSON + atlas. `base` is the complete
+               canonical-action reference template.
 test/        ← Vitest suite, file-per-module.
 ```
 
-`src/main.ts` wires it all together.
+`src/main.ts` wires it all together. The engine stays pure regardless of how
+much the moveset has grown — render, input, runtime, sandbox, and the CPU all
+sit outside `tick`.
 
 ## Architectural commitments (load-bearing)
 
@@ -79,8 +92,18 @@ Recursive types (`Trigger`, `Value`) need hand-typed `z.ZodType<T>` because Zod 
 - Don't add a string trigger DSL "for convenience" — the AST is the format LLMs target in phase 2.
 - Don't skip `parseCharacter` — direct JSON-to-`Character` casts bypass reference validation.
 
-## Phase status
+## Phase status (updated 2026-06-02)
 
-- **Phase 1: complete** (engine + state machine + animation + commands + collision + match flow + determinism harness). See `git log` for milestone history.
-- **Phase 2: scoped, not started** (AI character creator). Decisions and sub-phase plan stored in user-level memory.
-- **Phase 3: future** (rollback netcode, online play). Engine architecture is already prepared via the 4 commitments above.
+- **Phase 1: complete** (engine + state machine + animation + commands + collision + match flow + determinism harness).
+- **Engine moveset expansion: shipped** (rounds 1–7 of `MOVESET_GAP_DESIGN.md`, all past phase-1's original non-goals). Now in the engine:
+  - **Throws / command grabs** — `throw.ts` `Throw` controller + `ThrowDef`, bind/release, resolved before strikes.
+  - **Guard / blocking** — automatic block in `hitDef.ts` (high/low/mid/air via `guardFlag`), chip damage, blockstun, real `moveHit`/`moveGuarded` flags for hit-confirm/on-block cancels. Jump attacks are overheads (break crouch guard).
+  - **Charge & held-direction motions** (`commands.ts`: `[dir]N`, `/dir`), **power meter** (`PowerAdd`/`PowerSet`, `MAX_POWER`), **opponent triggers** (`p2BodyDist`, `p2Dist`, `p2.pos.y`, `p2.life`, `p2.stateNo`).
+  - **Dizzy/stun meter**, **launch → knockdown → getup** flow, **OTG**, and distinct end states (KO lies down / time-up loser slumps / winner poses).
+  - **Canonical action vocabulary** (`render/poses.ts` `CANONICAL_ACTIONS`) — the shared ~36-action set every character maps onto; procedural colour-coded poses render any character with no art. `base` declares an animation for every canonical id (the art/authoring template). An **action gallery** (`mountGallery`) cycles a fighter through all of them.
+  - **Demo/sandbox characters**: full 36-action **KFM** (Kung Fu Man) and an E. Honda built from base. **CPU P2** opponent in the input layer (`runtime/ai.ts`, 5 difficulty levels standstill→expert) — never touches `tick`.
+  - Render-side: follow-camera, parallax stage backgrounds, 30s round timer (win-by-life), unlimited/showcase mode for creator playtest.
+  - **M8 determinism stays green; 294 tests pass.** All additions live outside `tick` or are additive/deterministic.
+  - Deferred (next gameplay pass): throw teching/air throws, guard meter/parries/pushblock, de-hardcoding `'stand'`/`'ko'`/`'hit.*'`/`'guard.*'` transition literals.
+- **Phase 2: mid-build** (AI character creator). Template pipeline: pick a template → nano-banana-2 re-skins a green-screen KFM sheet → content-aware slice/key/despill/bake → atlas → engine. See `template-creator-pipeline` memory + `PHASE_2_PLAN.md`.
+- **Phase 3: future** (rollback netcode, online play). Engine architecture is still prepared via the 4 commitments above.

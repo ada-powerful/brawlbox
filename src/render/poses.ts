@@ -140,9 +140,7 @@ function isAttack(a: string): boolean {
   // prefix so plain words that happen to end in a tier code — e.g. "walk"
   // ends with "lk" — aren't misread as attacks.
   if (!/(lp|mp|hp|lk|mk|hk)$/.test(a)) return false;
-  return (
-    a.includes('stand') || a.includes('crouch') || a.includes('jump') || a.includes('air')
-  );
+  return a.includes('stand') || a.includes('crouch') || a.includes('jump') || a.includes('air');
 }
 
 /** A procedural silhouette: a body trapezoid plus an optional forward "limb" bar. */
@@ -216,7 +214,11 @@ function movementPose(a: string, frame: number, color: number): FrameShape {
 function attackPose(a: string, frame: number, color: number): FrameShape {
   const heavy = a.includes('heavy') || a.endsWith('hp') || a.endsWith('hk');
   const light = a.includes('light') || a.endsWith('lp') || a.endsWith('lk');
-  const stance = a.includes('crouch') ? 'crouch' : a.includes('jump') || a.includes('air') ? 'air' : 'stand';
+  const stance = a.includes('crouch')
+    ? 'crouch'
+    : a.includes('jump') || a.includes('air')
+      ? 'air'
+      : 'stand';
   // Tier drives reach/lean/width so light vs medium vs heavy read clearly apart.
   const reach = heavy ? 66 : light ? 24 : 44;
   const lean = heavy ? 14 : light ? 4 : 9;

@@ -46,7 +46,10 @@ interface GalleryAction {
 }
 
 function actionList(character: Character): GalleryAction[] {
-  const items = Object.keys(character.animations ?? {}).map((id) => ({ id, group: actionGroup(id) }));
+  const items = Object.keys(character.animations ?? {}).map((id) => ({
+    id,
+    group: actionGroup(id),
+  }));
   items.sort((a, b) => {
     const ga = GROUP_ORDER.indexOf(a.group);
     const gb = GROUP_ORDER.indexOf(b.group);
@@ -92,7 +95,10 @@ function staticPlayer(character: Character, animId: string, animFrame: number): 
   };
 }
 
-export async function mountGallery(mount: HTMLElement, opts: GalleryOptions): Promise<GalleryHandle> {
+export async function mountGallery(
+  mount: HTMLElement,
+  opts: GalleryOptions,
+): Promise<GalleryHandle> {
   const { character, atlasUrl, color } = opts;
 
   let textures: Record<string, import('pixi.js').Texture> | undefined;

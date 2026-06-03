@@ -74,10 +74,7 @@ export function keyOutGreenScreen(
  * neutralizes the fringe toward a neutral edge without punching holes or shifting
  * genuine character colors much. No-op for keys with no low channel (e.g. white).
  */
-export function despillChroma(
-  rgba: Uint8ClampedArray | Uint8Array | number[],
-  color: RGB,
-): void {
+export function despillChroma(rgba: Uint8ClampedArray | Uint8Array | number[], color: RGB): void {
   const ch = [color.r, color.g, color.b];
   const spill: number[] = [];
   const keep: number[] = [];

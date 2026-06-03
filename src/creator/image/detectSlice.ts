@@ -177,7 +177,10 @@ function ctx2d(
 function canvasToBlob(c: OffscreenCanvas | HTMLCanvasElement): Promise<Blob> {
   if ('convertToBlob' in c) return (c as OffscreenCanvas).convertToBlob({ type: 'image/png' });
   return new Promise((res, rej) =>
-    (c as HTMLCanvasElement).toBlob((b) => (b ? res(b) : rej(new Error('toBlob failed'))), 'image/png'),
+    (c as HTMLCanvasElement).toBlob(
+      (b) => (b ? res(b) : rej(new Error('toBlob failed'))),
+      'image/png',
+    ),
   );
 }
 
@@ -332,7 +335,8 @@ export async function sliceSheetByDetection(
   const rowProfile = new Array<number>(H).fill(0);
   for (let y = 0; y < H; y++) {
     let count = 0;
-    for (let x = 0; x < W; x++) if (isContent(data, (y * W + x) * 4, bg, diff, greenScreen)) count++;
+    for (let x = 0; x < W; x++)
+      if (isContent(data, (y * W + x) * 4, bg, diff, greenScreen)) count++;
     rowProfile[y] = count;
   }
   const bands = segmentByExpected(rowProfile, rowIdx.length);

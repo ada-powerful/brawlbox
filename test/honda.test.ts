@@ -32,11 +32,20 @@ const U = Btn.Up;
 describe('Honda character builds and validates', () => {
   test('parseCharacter accepted the full moveset', () => {
     expect(HONDA_CHARACTER.meta.id).toBe('honda');
-    for (const s of ['headbutt', 'sumoSplash', 'hundredSlap', 'superHeadbutt', 'oicho', 'oicho.exec']) {
+    for (const s of [
+      'headbutt',
+      'sumoSplash',
+      'hundredSlap',
+      'superHeadbutt',
+      'oicho',
+      'oicho.exec',
+    ]) {
       expect(HONDA_CHARACTER.states[s]).toBeDefined();
     }
     const cmdNames = (HONDA_CHARACTER.commands ?? []).map((c) => c.name);
-    expect(cmdNames).toEqual(expect.arrayContaining(['headbutt', 'splash', 'slap', 'superheadbutt', 'oicho']));
+    expect(cmdNames).toEqual(
+      expect.arrayContaining(['headbutt', 'splash', 'slap', 'superheadbutt', 'oicho']),
+    );
   });
 });
 
@@ -78,7 +87,16 @@ describe('power meter & super', () => {
   test('Super Headbutt requires meter and drains it; plain charge headbutts without', () => {
     // Without meter: the same super input falls through to the regular headbutt.
     const noMeter = world();
-    const superInput = [...rep(L, 50), R, R, R | Btn.X | Btn.Z, R | Btn.X | Btn.Z, Btn.X | Btn.Z, 0, 0];
+    const superInput = [
+      ...rep(L, 50),
+      R,
+      R,
+      R | Btn.X | Btn.Z,
+      R | Btn.X | Btn.Z,
+      Btn.X | Btn.Z,
+      0,
+      0,
+    ];
     const v1 = driveP1(noMeter, superInput);
     expect(v1.has('superHeadbutt')).toBe(false);
     expect(v1.has('headbutt')).toBe(true);

@@ -337,33 +337,221 @@
       ]
     },
 
-    "run": { "loop": false, "frames": [{ "sprite": "dash", "duration": -1, "hurtboxes": [{ "x": -30, "y": 0, "w": 60, "h": 100 }] }] },
-    "land": { "loop": false, "frames": [{ "sprite": "crouch", "duration": -1, "hurtboxes": [{ "x": -28, "y": 0, "w": 56, "h": 80 }] }] },
+    "run": {
+      "loop": false,
+      "frames": [
+        { "sprite": "dash", "duration": -1, "hurtboxes": [{ "x": -30, "y": 0, "w": 60, "h": 100 }] }
+      ]
+    },
+    "land": {
+      "loop": false,
+      "frames": [
+        {
+          "sprite": "crouch",
+          "duration": -1,
+          "hurtboxes": [{ "x": -28, "y": 0, "w": 56, "h": 80 }]
+        }
+      ]
+    },
 
-    "stand.light": { "loop": false, "frames": [{ "sprite": "punch-active", "duration": -1, "hurtboxes": [{ "x": -30, "y": 0, "w": 60, "h": 100 }], "hitboxes": [{ "x": 30, "y": 55, "w": 40, "h": 25 }] }] },
-    "stand.medium": { "loop": false, "frames": [{ "sprite": "punch-active", "duration": -1, "hurtboxes": [{ "x": -30, "y": 0, "w": 60, "h": 100 }], "hitboxes": [{ "x": 30, "y": 50, "w": 55, "h": 30 }] }] },
-    "stand.heavy": { "loop": false, "frames": [{ "sprite": "punch-active", "duration": -1, "hurtboxes": [{ "x": -30, "y": 0, "w": 60, "h": 100 }], "hitboxes": [{ "x": 30, "y": 48, "w": 72, "h": 38 }] }] },
+    "stand.light": {
+      "loop": false,
+      "frames": [
+        {
+          "sprite": "punch-active",
+          "duration": -1,
+          "hurtboxes": [{ "x": -30, "y": 0, "w": 60, "h": 100 }],
+          "hitboxes": [{ "x": 30, "y": 55, "w": 40, "h": 25 }]
+        }
+      ]
+    },
+    "stand.medium": {
+      "loop": false,
+      "frames": [
+        {
+          "sprite": "punch-active",
+          "duration": -1,
+          "hurtboxes": [{ "x": -30, "y": 0, "w": 60, "h": 100 }],
+          "hitboxes": [{ "x": 30, "y": 50, "w": 55, "h": 30 }]
+        }
+      ]
+    },
+    "stand.heavy": {
+      "loop": false,
+      "frames": [
+        {
+          "sprite": "punch-active",
+          "duration": -1,
+          "hurtboxes": [{ "x": -30, "y": 0, "w": 60, "h": 100 }],
+          "hitboxes": [{ "x": 30, "y": 48, "w": 72, "h": 38 }]
+        }
+      ]
+    },
 
-    "crouch.light": { "loop": false, "frames": [{ "sprite": "crouch", "duration": -1, "hurtboxes": [{ "x": -28, "y": 0, "w": 56, "h": 60 }], "hitboxes": [{ "x": 28, "y": 18, "w": 38, "h": 22 }] }] },
-    "crouch.medium": { "loop": false, "frames": [{ "sprite": "crouch", "duration": -1, "hurtboxes": [{ "x": -28, "y": 0, "w": 56, "h": 60 }], "hitboxes": [{ "x": 28, "y": 14, "w": 52, "h": 24 }] }] },
-    "crouch.heavy": { "loop": false, "frames": [{ "sprite": "crouch", "duration": -1, "hurtboxes": [{ "x": -28, "y": 0, "w": 56, "h": 60 }], "hitboxes": [{ "x": 28, "y": 5, "w": 70, "h": 25 }] }] },
+    "crouch.light": {
+      "loop": false,
+      "frames": [
+        {
+          "sprite": "crouch",
+          "duration": -1,
+          "hurtboxes": [{ "x": -28, "y": 0, "w": 56, "h": 60 }],
+          "hitboxes": [{ "x": 28, "y": 18, "w": 38, "h": 22 }]
+        }
+      ]
+    },
+    "crouch.medium": {
+      "loop": false,
+      "frames": [
+        {
+          "sprite": "crouch",
+          "duration": -1,
+          "hurtboxes": [{ "x": -28, "y": 0, "w": 56, "h": 60 }],
+          "hitboxes": [{ "x": 28, "y": 14, "w": 52, "h": 24 }]
+        }
+      ]
+    },
+    "crouch.heavy": {
+      "loop": false,
+      "frames": [
+        {
+          "sprite": "crouch",
+          "duration": -1,
+          "hurtboxes": [{ "x": -28, "y": 0, "w": 56, "h": 60 }],
+          "hitboxes": [{ "x": 28, "y": 5, "w": 70, "h": 25 }]
+        }
+      ]
+    },
 
-    "air.light": { "loop": false, "frames": [{ "sprite": "jump-fall", "duration": -1, "hurtboxes": [{ "x": -25, "y": 0, "w": 50, "h": 110 }], "hitboxes": [{ "x": 25, "y": 40, "w": 42, "h": 28 }] }] },
-    "air.medium": { "loop": false, "frames": [{ "sprite": "jump-fall", "duration": -1, "hurtboxes": [{ "x": -25, "y": 0, "w": 50, "h": 110 }], "hitboxes": [{ "x": 25, "y": 38, "w": 52, "h": 30 }] }] },
-    "air.heavy": { "loop": false, "frames": [{ "sprite": "jump-fall", "duration": -1, "hurtboxes": [{ "x": -25, "y": 0, "w": 50, "h": 110 }], "hitboxes": [{ "x": 25, "y": 35, "w": 62, "h": 34 }] }] },
+    "air.light": {
+      "loop": false,
+      "frames": [
+        {
+          "sprite": "jump-fall",
+          "duration": -1,
+          "hurtboxes": [{ "x": -25, "y": 0, "w": 50, "h": 110 }],
+          "hitboxes": [{ "x": 25, "y": 40, "w": 42, "h": 28 }]
+        }
+      ]
+    },
+    "air.medium": {
+      "loop": false,
+      "frames": [
+        {
+          "sprite": "jump-fall",
+          "duration": -1,
+          "hurtboxes": [{ "x": -25, "y": 0, "w": 50, "h": 110 }],
+          "hitboxes": [{ "x": 25, "y": 38, "w": 52, "h": 30 }]
+        }
+      ]
+    },
+    "air.heavy": {
+      "loop": false,
+      "frames": [
+        {
+          "sprite": "jump-fall",
+          "duration": -1,
+          "hurtboxes": [{ "x": -25, "y": 0, "w": 50, "h": 110 }],
+          "hitboxes": [{ "x": 25, "y": 35, "w": 62, "h": 34 }]
+        }
+      ]
+    },
 
-    "special": { "loop": false, "frames": [{ "sprite": "punch-active", "duration": -1, "hurtboxes": [{ "x": -30, "y": 0, "w": 60, "h": 100 }], "hitboxes": [{ "x": 30, "y": 50, "w": 64, "h": 34 }] }] },
-    "special.air": { "loop": false, "frames": [{ "sprite": "jump-fall", "duration": -1, "hurtboxes": [{ "x": -25, "y": 0, "w": 50, "h": 110 }], "hitboxes": [{ "x": 25, "y": 30, "w": 58, "h": 40 }] }] },
-    "super": { "loop": false, "frames": [{ "sprite": "punch-active", "duration": -1, "hurtboxes": [{ "x": -30, "y": 0, "w": 60, "h": 100 }], "hitboxes": [{ "x": 30, "y": 48, "w": 84, "h": 46 }] }] },
+    "special": {
+      "loop": false,
+      "frames": [
+        {
+          "sprite": "punch-active",
+          "duration": -1,
+          "hurtboxes": [{ "x": -30, "y": 0, "w": 60, "h": 100 }],
+          "hitboxes": [{ "x": 30, "y": 50, "w": 64, "h": 34 }]
+        }
+      ]
+    },
+    "special.air": {
+      "loop": false,
+      "frames": [
+        {
+          "sprite": "jump-fall",
+          "duration": -1,
+          "hurtboxes": [{ "x": -25, "y": 0, "w": 50, "h": 110 }],
+          "hitboxes": [{ "x": 25, "y": 30, "w": 58, "h": 40 }]
+        }
+      ]
+    },
+    "super": {
+      "loop": false,
+      "frames": [
+        {
+          "sprite": "punch-active",
+          "duration": -1,
+          "hurtboxes": [{ "x": -30, "y": 0, "w": 60, "h": 100 }],
+          "hitboxes": [{ "x": 30, "y": 48, "w": 84, "h": 46 }]
+        }
+      ]
+    },
 
-    "throw": { "loop": false, "frames": [{ "sprite": "punch-startup", "duration": -1, "hurtboxes": [{ "x": -30, "y": 0, "w": 60, "h": 100 }] }] },
+    "throw": {
+      "loop": false,
+      "frames": [
+        {
+          "sprite": "punch-startup",
+          "duration": -1,
+          "hurtboxes": [{ "x": -30, "y": 0, "w": 60, "h": 100 }]
+        }
+      ]
+    },
 
-    "hit.crouch": { "loop": false, "frames": [{ "sprite": "crouch", "duration": -1, "hurtboxes": [{ "x": -28, "y": 0, "w": 56, "h": 60 }] }] },
-    "fall": { "loop": false, "frames": [{ "sprite": "hit-air", "duration": -1, "hurtboxes": [{ "x": -30, "y": 0, "w": 60, "h": 90 }] }] },
+    "hit.crouch": {
+      "loop": false,
+      "frames": [
+        {
+          "sprite": "crouch",
+          "duration": -1,
+          "hurtboxes": [{ "x": -28, "y": 0, "w": 56, "h": 60 }]
+        }
+      ]
+    },
+    "fall": {
+      "loop": false,
+      "frames": [
+        {
+          "sprite": "hit-air",
+          "duration": -1,
+          "hurtboxes": [{ "x": -30, "y": 0, "w": 60, "h": 90 }]
+        }
+      ]
+    },
 
-    "win": { "loop": false, "frames": [{ "sprite": "stand", "duration": -1, "hurtboxes": [{ "x": -30, "y": 0, "w": 60, "h": 100 }] }] },
-    "taunt": { "loop": false, "frames": [{ "sprite": "stand", "duration": -1, "hurtboxes": [{ "x": -30, "y": 0, "w": 60, "h": 100 }] }] },
-    "intro": { "loop": false, "frames": [{ "sprite": "stand", "duration": -1, "hurtboxes": [{ "x": -30, "y": 0, "w": 60, "h": 100 }] }] }
+    "win": {
+      "loop": false,
+      "frames": [
+        {
+          "sprite": "stand",
+          "duration": -1,
+          "hurtboxes": [{ "x": -30, "y": 0, "w": 60, "h": 100 }]
+        }
+      ]
+    },
+    "taunt": {
+      "loop": false,
+      "frames": [
+        {
+          "sprite": "stand",
+          "duration": -1,
+          "hurtboxes": [{ "x": -30, "y": 0, "w": 60, "h": 100 }]
+        }
+      ]
+    },
+    "intro": {
+      "loop": false,
+      "frames": [
+        {
+          "sprite": "stand",
+          "duration": -1,
+          "hurtboxes": [{ "x": -30, "y": 0, "w": 60, "h": 100 }]
+        }
+      ]
+    }
   },
   "states": {
     "stand": {

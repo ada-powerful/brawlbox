@@ -353,7 +353,7 @@ export function CreatorPage() {
       // the LLM gets an appearance prompt even when the notes box is left empty.
       // In attributes mode the structured choices become the design prompt.
       let designPrompt =
-      mode === 'attributes' ? attributesToDescription(attrs, lookNotes) : prompt.trim();
+        mode === 'attributes' ? attributesToDescription(attrs, lookNotes) : prompt.trim();
       if (mode === 'photo' && refImage && BACKEND_MODE && API_BASE) {
         setStatus('Reading your photo…');
         try {
@@ -1248,7 +1248,8 @@ export function CreatorPage() {
                   )}
                   {imgBusy && (
                     <p className="animate-pulse text-sm text-primary">
-                      ● Skinning the fighter (generating sprites)… it'll open in Playtest when ready.
+                      ● Skinning the fighter (generating sprites)… it'll open in Playtest when
+                      ready.
                     </p>
                   )}
                 </div>

@@ -48,8 +48,7 @@ export function GamePage() {
   const [cpuLevel, setCpuLevel] = useState<CpuLevel>('normal');
   const [fighting, setFighting] = useState(false);
 
-  const entry = (id: string): RosterEntry =>
-    roster.find((r) => r.id === id) ?? BUILTINS[0]!;
+  const entry = (id: string): RosterEntry => roster.find((r) => r.id === id) ?? BUILTINS[0]!;
 
   if (fighting) {
     const p1: FighterSpec = {
@@ -87,12 +86,7 @@ export function GamePage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <SlotPicker
-        label="Player 1 (pink)"
-        roster={roster}
-        selectedId={p1Id}
-        onSelect={setP1Id}
-      />
+      <SlotPicker label="Player 1 (pink)" roster={roster} selectedId={p1Id} onSelect={setP1Id} />
       <SlotPicker
         label="Opponent — CPU (blue)"
         roster={roster}
@@ -110,7 +104,9 @@ export function GamePage() {
               key={lvl.id}
               onClick={() => setCpuLevel(lvl.id)}
               className={`rounded-md border px-3 py-1 text-sm transition-colors hover:bg-secondary/60 ${
-                cpuLevel === lvl.id ? 'border-primary bg-secondary/60 font-semibold' : 'border-border'
+                cpuLevel === lvl.id
+                  ? 'border-primary bg-secondary/60 font-semibold'
+                  : 'border-border'
               }`}
             >
               {lvl.label}

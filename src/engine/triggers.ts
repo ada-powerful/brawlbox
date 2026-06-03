@@ -96,9 +96,7 @@ function evalValue(v: Value, ctx: TriggerCtx): number | string | boolean {
     case 'p2BodyDist': {
       const opp = findOpponent(ctx);
       if (!opp) return 0;
-      return (
-        Math.abs(ctx.player.pos.x - opp.pos.x) - ctx.player.halfWidth - opp.halfWidth
-      );
+      return Math.abs(ctx.player.pos.x - opp.pos.x) - ctx.player.halfWidth - opp.halfWidth;
     }
     case 'p2Dist.x': {
       const opp = findOpponent(ctx);

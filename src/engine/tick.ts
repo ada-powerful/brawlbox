@@ -6,7 +6,14 @@ import type { Character } from './schema.ts';
 import { applyStateHeader, stepStateMachine } from './stateMachine.ts';
 import { applyBinds, applyThrows, detectThrows } from './throw.ts';
 import type { Inputs, Player, World } from './world.ts';
-import { isDowned, KO_DELAY, STAGE_CEILING, STAGE_LEFT_X, STAGE_RIGHT_X, STUN_DECAY } from './world.ts';
+import {
+  isDowned,
+  KO_DELAY,
+  STAGE_CEILING,
+  STAGE_LEFT_X,
+  STAGE_RIGHT_X,
+  STUN_DECAY,
+} from './world.ts';
 
 export function tick(world: World, characters: Record<string, Character>, inputs: Inputs): World {
   if (world.matchOver) {

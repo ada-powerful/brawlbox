@@ -113,8 +113,7 @@ export class MatchOverlay {
     // roundTime only reaches 0 when the clock runs out — a KO ends the match
     // before the timer decrements, so this cleanly distinguishes the two.
     const timeUp = world.roundTime === 0;
-    const result =
-      world.winner !== null ? `PLAYER ${world.winner + 1} WINS` : 'DRAW';
+    const result = world.winner !== null ? `PLAYER ${world.winner + 1} WINS` : 'DRAW';
     this.text.text = timeUp
       ? `TIME UP\n${result}\nPress R to restart`
       : `${result}\nPress R to restart`;

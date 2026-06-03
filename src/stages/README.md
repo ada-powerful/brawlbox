@@ -35,8 +35,8 @@ below it, so any image — sliced or generated — drops in without re-tuning:
   stage edges when zoomed out (a perspective trapezoid leaves matte triangles;
   fill them with the surface texture).
 - **groundY** — screen-y of the wall↔floor junction (the floor's far edge).
-  Defaults to `460`, the feet line — which puts feet on the floor's *back* edge.
-  Set it **above 460** (e.g. `400`) so the floor recedes *behind* the fighters
+  Defaults to `460`, the feet line — which puts feet on the floor's _back_ edge.
+  Set it **above 460** (e.g. `400`) so the floor recedes _behind_ the fighters
   and they stand **mid-floor**, with floor visible both behind and in front of
   them. Render-only; the sim's feet line stays at `GROUND_Y_SCREEN`.
 - **backColor** — optional solid colour painted behind every layer. Insurance so
@@ -76,7 +76,7 @@ between the top slats) was alpha-cut to transparent so the mountains show throug
 Generate, per stage, to the layout above:
 
 1. **Far scenery, 960×460.** The view seen through the wall — horizon along the
-   *bottom*, no characters/UI/foreground. e.g. _"distant mountain hillside under a
+   _bottom_, no characters/UI/foreground. e.g. _"distant mountain hillside under a
    hazy sky, horizon at the very bottom, painterly, no characters"_.
 2. **Near wall, 960×460, transparent PNG.** The back wall at the fighting plane
    with a **transparent** window opening (and any latticework / slats) so the far
@@ -100,7 +100,8 @@ import sceneryUrl from './scenery.png';
 import wallUrl from './wall.png';
 import floorUrl from './floor.png';
 export const myStage: StageArt = {
-  id: '<id>', name: '<Name>',
+  id: '<id>',
+  name: '<Name>',
   layers: [{ url: sceneryUrl, parallax: 0.35 }, { url: wallUrl }],
   floorUrl,
 };

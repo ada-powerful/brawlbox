@@ -84,10 +84,7 @@ export function Sandbox() {
           return;
         }
         bakedUrl = baked.atlasUrl;
-        setFighters((prev) => [
-          ...prev,
-          { id: 'kfm', label: 'KFM (sheet sprites)', ...baked },
-        ]);
+        setFighters((prev) => [...prev, { id: 'kfm', label: 'KFM (sheet sprites)', ...baked }]);
         setP1Id('kfm');
         setStatus('Ready.');
       })
@@ -189,7 +186,13 @@ export function Sandbox() {
     <select
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      style={{ padding: '4px 8px', borderRadius: 6, background: '#1c1c22', color: '#eee', border: '1px solid #333' }}
+      style={{
+        padding: '4px 8px',
+        borderRadius: 6,
+        background: '#1c1c22',
+        color: '#eee',
+        border: '1px solid #333',
+      }}
     >
       {fighters.map((f) => (
         <option key={f.id} value={f.id}>
@@ -231,7 +234,14 @@ export function Sandbox() {
         )}
         <button
           onClick={() => setMode((m) => (m === 'match' ? 'gallery' : 'match'))}
-          style={{ padding: '4px 10px', borderRadius: 6, background: '#3a2e4e', color: '#eee', border: '1px solid #5a4a7a', cursor: 'pointer' }}
+          style={{
+            padding: '4px 10px',
+            borderRadius: 6,
+            background: '#3a2e4e',
+            color: '#eee',
+            border: '1px solid #5a4a7a',
+            cursor: 'pointer',
+          }}
         >
           {mode === 'match' ? 'Action gallery →' : '← Back to match'}
         </button>
@@ -239,13 +249,27 @@ export function Sandbox() {
           <>
             <button
               onClick={() => handleRef.current?.reset()}
-              style={{ padding: '4px 10px', borderRadius: 6, background: '#26262e', color: '#eee', border: '1px solid #333', cursor: 'pointer' }}
+              style={{
+                padding: '4px 10px',
+                borderRadius: 6,
+                background: '#26262e',
+                color: '#eee',
+                border: '1px solid #333',
+                cursor: 'pointer',
+              }}
             >
               Reset (R)
             </button>
             <button
               onClick={() => handleRef.current?.toggleDebug()}
-              style={{ padding: '4px 10px', borderRadius: 6, background: '#26262e', color: '#eee', border: '1px solid #333', cursor: 'pointer' }}
+              style={{
+                padding: '4px 10px',
+                borderRadius: 6,
+                background: '#26262e',
+                color: '#eee',
+                border: '1px solid #333',
+                cursor: 'pointer',
+              }}
             >
               Debug (F1)
             </button>
@@ -280,7 +304,13 @@ export function Sandbox() {
               <select
                 value={p2Control}
                 onChange={(e) => setP2Control(e.target.value as 'human' | CpuLevel)}
-                style={{ padding: '4px 8px', borderRadius: 6, background: '#1c1c22', color: '#eee', border: '1px solid #333' }}
+                style={{
+                  padding: '4px 8px',
+                  borderRadius: 6,
+                  background: '#1c1c22',
+                  color: '#eee',
+                  border: '1px solid #333',
+                }}
               >
                 <option value="human">Human (keyboard)</option>
                 {CPU_LEVELS.map((lvl) => (
@@ -295,19 +325,40 @@ export function Sandbox() {
           <>
             <button
               onClick={() => galleryRef.current?.prev()}
-              style={{ padding: '4px 10px', borderRadius: 6, background: '#26262e', color: '#eee', border: '1px solid #333', cursor: 'pointer' }}
+              style={{
+                padding: '4px 10px',
+                borderRadius: 6,
+                background: '#26262e',
+                color: '#eee',
+                border: '1px solid #333',
+                cursor: 'pointer',
+              }}
             >
               ◀ Prev (←)
             </button>
             <button
               onClick={() => galleryRef.current?.togglePlay()}
-              style={{ padding: '4px 10px', borderRadius: 6, background: '#26262e', color: '#eee', border: '1px solid #333', cursor: 'pointer' }}
+              style={{
+                padding: '4px 10px',
+                borderRadius: 6,
+                background: '#26262e',
+                color: '#eee',
+                border: '1px solid #333',
+                cursor: 'pointer',
+              }}
             >
               Play/Pause (Space)
             </button>
             <button
               onClick={() => galleryRef.current?.next()}
-              style={{ padding: '4px 10px', borderRadius: 6, background: '#26262e', color: '#eee', border: '1px solid #333', cursor: 'pointer' }}
+              style={{
+                padding: '4px 10px',
+                borderRadius: 6,
+                background: '#26262e',
+                color: '#eee',
+                border: '1px solid #333',
+                cursor: 'pointer',
+              }}
             >
               Next (▶)
             </button>
@@ -315,7 +366,10 @@ export function Sandbox() {
         )}
       </div>
 
-      <div ref={mountRef} style={{ border: '1px solid #333', borderRadius: 8, overflow: 'hidden' }} />
+      <div
+        ref={mountRef}
+        style={{ border: '1px solid #333', borderRadius: 8, overflow: 'hidden' }}
+      />
 
       <p style={{ fontSize: 12, color: '#9a9aa5', margin: 0, textAlign: 'center' }}>
         {mode === 'gallery'

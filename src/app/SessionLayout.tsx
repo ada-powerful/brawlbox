@@ -2,18 +2,8 @@ import { useEffect, useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import type { User } from 'oidc-client-ts';
 import { Button } from '@/components/ui/button.tsx';
-import {
-  handleRedirectCallback,
-  getAccessToken,
-  login,
-  logout,
-  userEmail,
-} from '@/auth/auth.ts';
-import {
-  listCloudCharacters,
-  listGallery,
-  type CloudCharacter,
-} from '@/creator/store/cloud.ts';
+import { handleRedirectCallback, getAccessToken, login, logout, userEmail } from '@/auth/auth.ts';
+import { listCloudCharacters, listGallery, type CloudCharacter } from '@/creator/store/cloud.ts';
 import { API_BASE, AUTH_ENABLED, BACKEND_MODE, CAN_CLOUD } from '@/app/config.ts';
 import type { Session } from '@/app/session.ts';
 

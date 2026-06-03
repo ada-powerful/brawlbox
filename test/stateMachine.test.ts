@@ -6,7 +6,11 @@ import baseChar from '../characters/base/character.json' with { type: 'json' };
 
 const base = parseCharacter(baseChar);
 
-function step(player: ReturnType<typeof createWorld>['players'][number], c: Character, buttons: number) {
+function step(
+  player: ReturnType<typeof createWorld>['players'][number],
+  c: Character,
+  buttons: number,
+) {
   const world = createWorld();
   stepStateMachine(player!, c, {
     world,
@@ -305,7 +309,11 @@ describe('stepStateMachine', () => {
         moveType: 'I',
         physics: 'N',
         controllers: [
-          { type: 'VelSet', xForward: 8, trigger: { op: 'eq', left: { ref: 'time' }, right: { const: 0 } } },
+          {
+            type: 'VelSet',
+            xForward: 8,
+            trigger: { op: 'eq', left: { ref: 'time' }, right: { const: 0 } },
+          },
         ],
       },
     });
@@ -313,7 +321,11 @@ describe('stepStateMachine', () => {
     const p = world.players[0]!;
     p.stateId = 'go';
     p.facing = -1;
-    stepStateMachine(p, c, { world, inputs: { players: [{ buttons: 0 }, { buttons: 0 }] }, playerIndex: 0 });
+    stepStateMachine(p, c, {
+      world,
+      inputs: { players: [{ buttons: 0 }, { buttons: 0 }] },
+      playerIndex: 0,
+    });
     expect(p.vel.x).toBe(-8); // 8 * facing(-1)
   });
 
@@ -324,7 +336,11 @@ describe('stepStateMachine', () => {
         moveType: 'I',
         physics: 'N',
         controllers: [
-          { type: 'VelAdd', xForward: 5, trigger: { op: 'eq', left: { ref: 'time' }, right: { const: 0 } } },
+          {
+            type: 'VelAdd',
+            xForward: 5,
+            trigger: { op: 'eq', left: { ref: 'time' }, right: { const: 0 } },
+          },
         ],
       },
     });
@@ -333,7 +349,11 @@ describe('stepStateMachine', () => {
     p.stateId = 'go';
     p.facing = 1;
     p.vel.x = 2;
-    stepStateMachine(p, c, { world, inputs: { players: [{ buttons: 0 }, { buttons: 0 }] }, playerIndex: 0 });
+    stepStateMachine(p, c, {
+      world,
+      inputs: { players: [{ buttons: 0 }, { buttons: 0 }] },
+      playerIndex: 0,
+    });
     expect(p.vel.x).toBe(7); // 2 + 5 * facing(1)
   });
 
@@ -355,11 +375,19 @@ describe('stepStateMachine', () => {
     const world = createWorld();
     const p = world.players[0]!;
     expect(p.power).toBe(0);
-    stepStateMachine(p, c, { world, inputs: { players: [{ buttons: 0 }, { buttons: 0 }] }, playerIndex: 0 });
+    stepStateMachine(p, c, {
+      world,
+      inputs: { players: [{ buttons: 0 }, { buttons: 0 }] },
+      playerIndex: 0,
+    });
     expect(p.power).toBe(500);
 
     p.power = MAX_POWER - 100;
-    stepStateMachine(p, c, { world, inputs: { players: [{ buttons: 0 }, { buttons: 0 }] }, playerIndex: 0 });
+    stepStateMachine(p, c, {
+      world,
+      inputs: { players: [{ buttons: 0 }, { buttons: 0 }] },
+      playerIndex: 0,
+    });
     expect(p.power).toBe(MAX_POWER); // clamped, not 3400
   });
 
@@ -381,7 +409,11 @@ describe('stepStateMachine', () => {
     const world = createWorld();
     const p = world.players[0]!;
     p.power = 50;
-    stepStateMachine(p, setChar, { world, inputs: { players: [{ buttons: 0 }, { buttons: 0 }] }, playerIndex: 0 });
+    stepStateMachine(p, setChar, {
+      world,
+      inputs: { players: [{ buttons: 0 }, { buttons: 0 }] },
+      playerIndex: 0,
+    });
     expect(p.power).toBe(1200);
 
     const drainChar = makeCharacter({
@@ -398,7 +430,11 @@ describe('stepStateMachine', () => {
         ],
       },
     });
-    stepStateMachine(p, drainChar, { world, inputs: { players: [{ buttons: 0 }, { buttons: 0 }] }, playerIndex: 0 });
+    stepStateMachine(p, drainChar, {
+      world,
+      inputs: { players: [{ buttons: 0 }, { buttons: 0 }] },
+      playerIndex: 0,
+    });
     expect(p.power).toBe(0); // floored
   });
 
@@ -420,7 +456,11 @@ describe('stepStateMachine', () => {
     const world = createWorld();
     const p = world.players[0]!;
     p.stateTime = 4;
-    stepStateMachine(p, c, { world, inputs: { players: [{ buttons: 0 }, { buttons: 0 }] }, playerIndex: 0 });
+    stepStateMachine(p, c, {
+      world,
+      inputs: { players: [{ buttons: 0 }, { buttons: 0 }] },
+      playerIndex: 0,
+    });
     expect(p.stateId).toBe('stand');
     expect(p.stateTime).toBe(5); // incremented, no state change
   });

@@ -1,10 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import {
-  CANONICAL_ACTIONS,
-  GROUP_COLORS,
-  actionGroup,
-  poseFor,
-} from '../src/render/poses.ts';
+import { CANONICAL_ACTIONS, GROUP_COLORS, actionGroup, poseFor } from '../src/render/poses.ts';
 
 const BASE = 0xff5577;
 
@@ -22,7 +17,17 @@ describe('canonical action vocabulary', () => {
 
   test('covers every action group', () => {
     const groups = new Set(CANONICAL_ACTIONS.map((a) => a.group));
-    for (const g of ['movement', 'attack', 'special', 'super', 'throw', 'guard', 'hurt', 'thrown', 'system']) {
+    for (const g of [
+      'movement',
+      'attack',
+      'special',
+      'super',
+      'throw',
+      'guard',
+      'hurt',
+      'thrown',
+      'system',
+    ]) {
       expect(groups.has(g as never)).toBe(true);
     }
   });

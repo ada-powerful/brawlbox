@@ -92,8 +92,7 @@ export function AttributesForm({
   // after a save the applied values already match, so it's a no-op.
   useEffect(() => setDraft(toDraft(character)), [character]);
 
-  const set = (key: keyof Draft, value: string): void =>
-    setDraft((d) => ({ ...d, [key]: value }));
+  const set = (key: keyof Draft, value: string): void => setDraft((d) => ({ ...d, [key]: value }));
 
   // Edit width/height; when the ratio is locked, scale the partner field by the
   // ratio just before this keystroke (so the ratio stays constant as you type).

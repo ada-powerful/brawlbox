@@ -1,17 +1,27 @@
+import { useCallback, useEffect, useState } from 'react';
 import { cn } from '@/lib/utils.ts';
 import type { Character, FrameRect } from '@/engine/schema.ts';
 import { GROUP_COLORS, type ActionGroup } from '@/render/poses.ts';
-import {
-  buildControlsMap,
-  type ControlRow,
-  type InputVariant,
-} from '@/creator/controlsMap.ts';
+import { buildControlsMap, type ControlRow, type InputVariant } from '@/creator/controlsMap.ts';
+
+/** A frame thumbnail was clicked: open the zoom view on this action's frames. */
+export interface FrameZoom {
+  /** Action id the frames belong to (shown as the zoom title). */
+  action: string;
+  /** All sprite keys for the action's animation, in order. */
+  frames: string[];
+  /** Index of the clicked frame within `frames`. */
+  index: number;
+}
+
+export type OpenZoom = (zoom: FrameZoom) => void;
 
 /**
  * "Controls" tab for the creator: the frames↔buttons map. For every action it
  * shows the keys/commands that trigger it (P1 bindings) alongside thumbnails of
  * that action's animation frames, then lists the passive actions (idle, hit
- * reactions, KO/win) that play automatically with no input.
+ * reactions, KO/win) that play automatically with no input. Clicking a thumbnail
+ * opens a zoom overlay you can browse with ←/→.
  */
 export function ControlsMap({
   character,
@@ -20,6 +30,8 @@ export function ControlsMap({
   character: Character | null;
   atlasUrl?: string;
 }): React.JSX.Element {
+  const [zoom, setZoom] = useState<FrameZoom | null>(null);
+
   if (!character) {
     return (
       <p className="text-sm text-muted-foreground">
@@ -42,7 +54,8 @@ export function ControlsMap({
         <Kbd>I</Kbd>
         <Kbd>O</Kbd> / <Kbd>J</Kbd>
         <Kbd>K</Kbd>
-        <Kbd>L</Kbd>. Each row maps the press to the animation frames it plays.
+        <Kbd>L</Kbd>. Each row maps the press to the animation frames it plays.{' '}
+        {sheetUrl && atlasFrames && <span>Click any frame to enlarge it.</span>}
       </p>
 
       <Section
@@ -51,6 +64,7 @@ export function ControlsMap({
         rows={inputs}
         atlasFrames={atlasFrames}
         sheetUrl={sheetUrl}
+        onOpen={setZoom}
       />
 
       <Section
@@ -59,6 +73,7 @@ export function ControlsMap({
         rows={passive}
         atlasFrames={atlasFrames}
         sheetUrl={sheetUrl}
+        onOpen={setZoom}
       />
 
       {!sheetUrl && (
@@ -66,6 +81,16 @@ export function ControlsMap({
           Frame thumbnails appear once sprites are generated — until then each action shows its
           frame count.
         </p>
+      )}
+
+      {zoom && atlasFrames && sheetUrl && (
+        <FrameLightbox
+          zoom={zoom}
+          atlasFrames={atlasFrames}
+          sheetUrl={sheetUrl}
+          onChange={setZoom}
+          onClose={() => setZoom(null)}
+        />
       )}
     </div>
   );
@@ -77,12 +102,14 @@ function Section({
   rows,
   atlasFrames,
   sheetUrl,
+  onOpen,
 }: {
   title: string;
   subtitle: string;
   rows: ControlRow[];
   atlasFrames: Record<string, FrameRect> | undefined;
   sheetUrl: string | undefined;
+  onOpen: OpenZoom;
 }): React.JSX.Element | null {
   if (rows.length === 0) return null;
   return (
@@ -93,7 +120,13 @@ function Section({
       </div>
       <div className="flex flex-col divide-y divide-border rounded-md border">
         {rows.map((row) => (
-          <Row key={row.id} row={row} atlasFrames={atlasFrames} sheetUrl={sheetUrl} />
+          <Row
+            key={row.id}
+            row={row}
+            atlasFrames={atlasFrames}
+            sheetUrl={sheetUrl}
+            onOpen={onOpen}
+          />
         ))}
       </div>
     </div>
@@ -104,10 +137,12 @@ function Row({
   row,
   atlasFrames,
   sheetUrl,
+  onOpen,
 }: {
   row: ControlRow;
   atlasFrames: Record<string, FrameRect> | undefined;
   sheetUrl: string | undefined;
+  onOpen: OpenZoom;
 }): React.JSX.Element {
   return (
     <div className="grid grid-cols-1 gap-2 p-2 sm:grid-cols-[minmax(0,9rem)_minmax(0,12rem)_1fr] sm:items-center">
@@ -129,7 +164,13 @@ function Row({
       </div>
 
       {/* Frame strip */}
-      <FrameStrip frames={row.frames} atlasFrames={atlasFrames} sheetUrl={sheetUrl} />
+      <FrameStrip
+        action={row.id}
+        frames={row.frames}
+        atlasFrames={atlasFrames}
+        sheetUrl={sheetUrl}
+        onOpen={onOpen}
+      />
     </div>
   );
 }
@@ -170,13 +211,17 @@ const THUMB_W = 38;
 const THUMB_H = 50;
 
 function FrameStrip({
+  action,
   frames,
   atlasFrames,
   sheetUrl,
+  onOpen,
 }: {
+  action: string;
   frames: string[];
   atlasFrames: Record<string, FrameRect> | undefined;
   sheetUrl: string | undefined;
+  onOpen: OpenZoom;
 }): React.JSX.Element {
   if (frames.length === 0) {
     return <span className="text-xs text-muted-foreground">no frames</span>;
@@ -196,9 +241,23 @@ function FrameStrip({
   return (
     <div className="flex flex-wrap items-center gap-1">
       {shown.map((sprite, i) => (
-        <Thumb key={i} rect={atlasFrames![sprite]} sprite={sprite} sheetUrl={sheetUrl!} />
+        <Thumb
+          key={i}
+          rect={atlasFrames![sprite]}
+          sprite={sprite}
+          sheetUrl={sheetUrl!}
+          onClick={() => onOpen({ action, frames, index: i })}
+        />
       ))}
-      {overflow > 0 && <span className="text-xs text-muted-foreground">+{overflow}</span>}
+      {overflow > 0 && (
+        <button
+          type="button"
+          className="text-xs text-muted-foreground hover:text-foreground"
+          onClick={() => onOpen({ action, frames, index: MAX_THUMBS })}
+        >
+          +{overflow}
+        </button>
+      )}
     </div>
   );
 }
@@ -213,16 +272,20 @@ function Thumb({
   rect,
   sprite,
   sheetUrl,
+  onClick,
 }: {
   rect: FrameRect | undefined;
   sprite: string;
   sheetUrl: string;
+  onClick: () => void;
 }): React.JSX.Element {
   if (!rect) {
     return (
-      <span
-        title={`${sprite} (unmapped)`}
-        className="shrink-0 rounded border border-dashed border-input bg-secondary/30"
+      <button
+        type="button"
+        onClick={onClick}
+        title={`${sprite} (unmapped) — click to enlarge`}
+        className="shrink-0 cursor-zoom-in rounded border border-dashed border-input bg-secondary/30"
         style={{ width: THUMB_W, height: THUMB_H }}
       />
     );
@@ -231,9 +294,11 @@ function Thumb({
   const padX = (THUMB_W - rect.w * scale) / 2;
   const padY = (THUMB_H - rect.h * scale) / 2;
   return (
-    <span
-      title={sprite}
-      className="relative shrink-0 overflow-hidden rounded border border-input bg-secondary/30"
+    <button
+      type="button"
+      onClick={onClick}
+      title={`${sprite} — click to enlarge`}
+      className="relative shrink-0 cursor-zoom-in overflow-hidden rounded border border-input bg-secondary/30 hover:border-ring"
       style={{ width: THUMB_W, height: THUMB_H }}
     >
       <img
@@ -250,7 +315,134 @@ function Thumb({
           imageRendering: 'pixelated',
         }}
       />
-    </span>
+    </button>
+  );
+}
+
+const ZOOM_W = 360;
+const ZOOM_H = 460;
+
+/**
+ * Full-screen overlay showing one frame enlarged. ←/→ step through the action's
+ * frames (clamped to its bounds), Esc or a backdrop click closes. The enlarged
+ * frame reuses the atlas-crop transform from {@link Thumb}, scaled up to fill the
+ * larger tile.
+ */
+function FrameLightbox({
+  zoom,
+  atlasFrames,
+  sheetUrl,
+  onChange,
+  onClose,
+}: {
+  zoom: FrameZoom;
+  atlasFrames: Record<string, FrameRect>;
+  sheetUrl: string;
+  onChange: (zoom: FrameZoom) => void;
+  onClose: () => void;
+}): React.JSX.Element {
+  const { action, frames, index } = zoom;
+  const sprite = frames[index];
+  const rect = sprite ? atlasFrames[sprite] : undefined;
+
+  const step = useCallback(
+    (delta: number) => {
+      const next = index + delta;
+      if (next < 0 || next >= frames.length) return;
+      onChange({ action, frames, index: next });
+    },
+    [action, frames, index, onChange],
+  );
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        step(-1);
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        step(1);
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [step, onClose]);
+
+  const scale = rect ? Math.min(ZOOM_W / rect.w, ZOOM_H / rect.h) : 1;
+  const padX = rect ? (ZOOM_W - rect.w * scale) / 2 : 0;
+  const padY = rect ? (ZOOM_H - rect.h * scale) / 2 : 0;
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={`${action} frame ${index + 1} of ${frames.length}`}
+      className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-4 bg-black/80 p-6"
+      onClick={onClose}
+    >
+      <div className="flex flex-col items-center gap-3" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-1 text-sm text-white">
+          <span className="font-semibold">{action}</span>
+          <span className="text-white/60">
+            · frame {index + 1} / {frames.length}
+          </span>
+          {sprite && <span className="ml-1 font-mono text-xs text-white/40">{sprite}</span>}
+        </div>
+
+        <div className="flex items-center gap-4">
+          <button
+            type="button"
+            disabled={index <= 0}
+            onClick={() => step(-1)}
+            aria-label="Previous frame"
+            className="rounded-full border border-white/30 px-3 py-2 text-lg text-white disabled:opacity-25 enabled:hover:bg-white/10"
+          >
+            ‹
+          </button>
+
+          <div
+            className="relative overflow-hidden rounded-md border border-white/20 bg-black/40"
+            style={{ width: ZOOM_W, height: ZOOM_H }}
+          >
+            {rect ? (
+              <img
+                src={sheetUrl}
+                alt={sprite}
+                draggable={false}
+                className="max-w-none select-none"
+                style={{
+                  position: 'absolute',
+                  left: 0,
+                  top: 0,
+                  transformOrigin: 'top left',
+                  transform: `translate(${padX}px, ${padY}px) scale(${scale}) translate(${-rect.x}px, ${-rect.y}px)`,
+                  imageRendering: 'pixelated',
+                }}
+              />
+            ) : (
+              <span className="absolute inset-0 flex items-center justify-center text-sm text-white/50">
+                {sprite ? 'unmapped frame' : 'no frame'}
+              </span>
+            )}
+          </div>
+
+          <button
+            type="button"
+            disabled={index >= frames.length - 1}
+            onClick={() => step(1)}
+            aria-label="Next frame"
+            className="rounded-full border border-white/30 px-3 py-2 text-lg text-white disabled:opacity-25 enabled:hover:bg-white/10"
+          >
+            ›
+          </button>
+        </div>
+
+        <p className="text-xs text-white/50">← / → to browse · Esc to close</p>
+      </div>
+    </div>
   );
 }
 

@@ -21,8 +21,20 @@ function fixture(): Character {
     size: { width: 60, height: 110, headY: 100 },
     animations: {
       stand: { loop: true, frames: [{ sprite: 'stand-0', duration: 6 }] },
-      walk: { loop: true, frames: [{ sprite: 'walk-0', duration: 6 }, { sprite: 'walk-1', duration: 6 }] },
-      punch: { loop: false, frames: [{ sprite: 'punch-0', duration: 4 }, { sprite: 'punch-1', duration: 4 }] },
+      walk: {
+        loop: true,
+        frames: [
+          { sprite: 'walk-0', duration: 6 },
+          { sprite: 'walk-1', duration: 6 },
+        ],
+      },
+      punch: {
+        loop: false,
+        frames: [
+          { sprite: 'punch-0', duration: 4 },
+          { sprite: 'punch-1', duration: 4 },
+        ],
+      },
       hit: { loop: false, frames: [{ sprite: 'hit-0', duration: 4 }] },
       taunt: { loop: false, frames: [{ sprite: 'taunt-0', duration: 4 }] },
     },

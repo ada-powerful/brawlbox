@@ -185,7 +185,12 @@ export async function mountGame(mount: HTMLElement, opts: MountOptions): Promise
       // for this tick (P1 stays human). Done here, outside the pure tick, so the
       // engine still just consumes an Inputs struct.
       if (cpuP2) {
-        inp = { players: [inp.players[0] ?? { buttons: 0 }, { buttons: cpuInput(w, characters, 1, cpuLevel) }] };
+        inp = {
+          players: [
+            inp.players[0] ?? { buttons: 0 },
+            { buttons: cpuInput(w, characters, 1, cpuLevel) },
+          ],
+        };
       }
       const before = w.roundTime;
       // Snapshot life before the tick so showcase mode can pin it back, keeping

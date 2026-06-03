@@ -34,10 +34,42 @@ interface Behavior {
 // `null` = the standstill dummy (no inputs at all).
 const BEHAVIOR: Record<CpuLevel, Behavior | null> = {
   standstill: null,
-  easy: { attackPhase: 110, blockPct: 18, reactGuard: false, jumpInEvery: 0, antiAir: false, aggro: 40, light: true },
-  normal: { attackPhase: 70, blockPct: 55, reactGuard: false, jumpInEvery: 200, antiAir: false, aggro: 100, light: false },
-  hard: { attackPhase: 46, blockPct: 80, reactGuard: false, jumpInEvery: 120, antiAir: true, aggro: 100, light: false },
-  expert: { attackPhase: 32, blockPct: 94, reactGuard: true, jumpInEvery: 84, antiAir: true, aggro: 100, light: false },
+  easy: {
+    attackPhase: 110,
+    blockPct: 18,
+    reactGuard: false,
+    jumpInEvery: 0,
+    antiAir: false,
+    aggro: 40,
+    light: true,
+  },
+  normal: {
+    attackPhase: 70,
+    blockPct: 55,
+    reactGuard: false,
+    jumpInEvery: 200,
+    antiAir: false,
+    aggro: 100,
+    light: false,
+  },
+  hard: {
+    attackPhase: 46,
+    blockPct: 80,
+    reactGuard: false,
+    jumpInEvery: 120,
+    antiAir: true,
+    aggro: 100,
+    light: false,
+  },
+  expert: {
+    attackPhase: 32,
+    blockPct: 94,
+    reactGuard: true,
+    jumpInEvery: 84,
+    antiAir: true,
+    aggro: 100,
+    light: false,
+  },
 };
 
 const STRIKE = 88; // within poke range

@@ -2,9 +2,14 @@
 
 Closing the highest-leverage gaps between the current engine and a full MUGEN
 character (reference: Ultimate E. Honda — charge specials, command grabs, supers,
-guard, power meter, ~40 sctrl types). **Round 1** landed three **file-disjoint**
-tracks (below); **round 2** (throws) and **round 3** (guard) have since shipped.
-Remaining work is tracked under **Deferred**.
+guard, power meter, ~40 sctrl types).
+
+**Status (2026-06-02): rounds 1–7 all shipped**, plus follow-on gameplay/art work
+(see "Post-round-7" below). Round 1 landed three **file-disjoint** tracks (below);
+round 2 (throws), round 3 (guard), round 4 (E. Honda validation), round 5
+(canonical action vocabulary), round 6 (complete base reference + action gallery),
+and round 7 (KFM action template) have since shipped. M8 determinism stays green;
+294 tests pass. Remaining work is tracked under **Deferred**.
 
 ## Track 1 — Charge & held-direction motions (`src/engine/commands.ts`)
 
@@ -14,8 +19,8 @@ schema change); `parseMotion` understands the new tokens.
 - **Charge** `[dir]N` — hold `dir` for ≥N consecutive ticks before the release
   steps. `MotionStep` gains `charge?: number`. Charge run is counted backward
   over the buffer independent of the post-release `bufferTicks` window.
-  - Headbutt: `"[B]30,F,x"`  · Sumo Splash: `"[D]30,U,a"`
-- **Held-direction** `/dir` — the step is matched as *held* (no release-edge
+  - Headbutt: `"[B]30,F,x"` · Sumo Splash: `"[D]30,U,a"`
+- **Held-direction** `/dir` — the step is matched as _held_ (no release-edge
   gap required). `MotionStep` gains `hold?: boolean`. For proximity throws: `"/F,z"`.
 
 ## Track 2 — Full 6-button normal moveset (`characters/base/character.json`)
@@ -81,7 +86,7 @@ roster (reuses the base atlas). Proven by `test/honda.test.ts` (9 tests) which
 drives real input scripts through `tick`:
 
 - **Sumo Headbutt** — `[B]35,F,x` charge special (and a no-charge input correctly
-  does *not* fire it).
+  does _not_ fire it).
 - **Sumo Splash** — `[D]35,U+a` charge anti-air (up+button resolves before jump).
 - **Hundred Hand Slap** — `y,y,y` mash (y is unbound in base, so no normal eats it).
 - **Super Headbutt** — `[B]45,F,x+z` gated on `power>=1000`; drains the meter and
@@ -99,7 +104,7 @@ drives real input scripts through `tick`:
   This is the authoring + art target: a fully-realised character supplies one
   animation per id (hand-drawn or NB2-generated), so any character slots into the
   same set.
-- **`actionGroup(id)`** pattern-matches *ad-hoc* anim ids too (`standHP`,
+- **`actionGroup(id)`** pattern-matches _ad-hoc_ anim ids too (`standHP`,
   `special.slap`, `guard.crouch`…), so existing characters classify for free.
 - **`poseFor(id, frame, baseColor)`** → a distinct, colour-coded silhouette per
   group (attack=white, special=orange, super=gold, throw=green, guard=blue,
@@ -113,7 +118,7 @@ drives real input scripts through `tick`:
 ## Round 6 — Complete reference base + action gallery (DONE)
 
 - **(a) `base` is now a complete canonical reference.** `characters/base/character.json`
-  declares an animation for *every* `CANONICAL_ACTIONS` id (reusing the placeholder
+  declares an animation for _every_ `CANONICAL_ACTIONS` id (reusing the placeholder
   atlas), so it's the authoring/art template and the gallery's sprite path resolves
   for it. A bun check asserts "all canonical actions covered"; determinism/schema
   tests stay green.
@@ -142,11 +147,36 @@ preset actions, and a generated/retextured sheet with the same layout slots in.
   shows each action with the correct sheet frame.
 - A mapping sim asserts every template sprite key resolves to its intended row.
 
-NOTE: animation/art mapping is wired; the *gameplay rules* the spec describes
+NOTE: animation/art mapping is wired; the _gameplay rules_ the spec describes
 (¼-damage guard chip, hold-to-charge, OTG max-3 with crouch light kick, launch-
 vs-in-place knockdown, get-up) still ride on `base`'s state machine and are the
 next gameplay pass. Frame `frac` values are best-effort and meant to be tuned by
 eye in the gallery.
+
+## Post-round-7 — gameplay, demo character & CPU (DONE)
+
+Work that shipped after the rounds above (commits `120cf87`, `0845ebe`, `1b99e61`,
+`2d3b183`):
+
+- **Dizzy/stun meter** (`hitDef.ts`/`world.ts`): clean grounded hits accumulate
+  stun (by damage), bleeding off only outside hitstun, so combos dizzy but spaced
+  pokes don't. At `STUN_MAX` the victim routes to a `dizzy` state (if defined).
+- **Launch → knockdown → getup** + **OTG**: launched victims (`hit.air`) crash
+  into a knockdown→getup instead of landing on their feet. `enterEndState` makes
+  KO (lie down), time-up loss (slump dizzy), and win (pose) read distinctly.
+- **Overheads**: jump attacks use `guardFlag 'H'` — a crouch-block can't stop them
+  (must stand-block); low/mid attacks stay crouch-guardable.
+- **KFM (Kung Fu Man)**: a full 36-action sandbox character on the canonical
+  vocabulary — movement/dash/jumps/cross-up, normals, guard, throw→toss→knockdown
+  →getup, specials (2-hand punch, hooks/uppercut launchers, charged punch, walking/
+  dashing kicks). Renamed from the earlier "kyo2". Offline-baked from a 4K template
+  sheet. See `kfm2-character` memory.
+- **CPU P2 opponent** (`runtime/ai.ts`): reactive CPU in the **input layer**,
+  cadenced off `world.tick` — it never touches the pure `tick`, so M8 is
+  unaffected. 5 selectable difficulty levels (standstill / easy / normal / hard /
+  expert); expert react-guards in the correct stance (crouch-blocks lows,
+  stand-blocks overheads). Online-first model: human drives P1, CPU drives P2. ON
+  in the game page + sandbox, OFF in the creator's free-experiment playtest.
 
 ## Deferred (next round)
 

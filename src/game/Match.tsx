@@ -36,7 +36,13 @@ export function Match({
     // id (e.g. base vs base) would collide. Suffix p2 to keep them distinct.
     const p2Spec: FighterSpec =
       p2.character.meta.id === p1.character.meta.id
-        ? { ...p2, character: { ...p2.character, meta: { ...p2.character.meta, id: `${p2.character.meta.id}-opp` } } }
+        ? {
+            ...p2,
+            character: {
+              ...p2.character,
+              meta: { ...p2.character.meta, id: `${p2.character.meta.id}-opp` },
+            },
+          }
         : p2;
 
     mountGame(mount, { p1, p2: p2Spec, unlimited, cpuP2, cpuLevel })
@@ -50,7 +56,17 @@ export function Match({
       disposed = true;
       handle?.destroy();
     };
-  }, [p1.character, p1.atlasUrl, p1.color, p2.character, p2.atlasUrl, p2.color, unlimited, cpuP2, cpuLevel]);
+  }, [
+    p1.character,
+    p1.atlasUrl,
+    p1.color,
+    p2.character,
+    p2.atlasUrl,
+    p2.color,
+    unlimited,
+    cpuP2,
+    cpuLevel,
+  ]);
 
   return <div ref={ref} className="overflow-hidden rounded-lg border" />;
 }

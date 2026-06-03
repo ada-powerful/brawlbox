@@ -185,9 +185,9 @@ describe('evalTrigger', () => {
       p1.halfWidth = 30;
       p2.halfWidth = 30; // 200 - 30 - 30 = 140
       const c = ctx({ world, player: p1, playerIndex: 0 });
-      expect(
-        evalTrigger({ op: 'eq', left: { ref: 'p2BodyDist' }, right: { const: 140 } }, c),
-      ).toBe(true);
+      expect(evalTrigger({ op: 'eq', left: { ref: 'p2BodyDist' }, right: { const: 140 } }, c)).toBe(
+        true,
+      );
     });
 
     test('p2.life / p2.pos.y / p2.stateNo read the opponent', () => {

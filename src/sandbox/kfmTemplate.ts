@@ -157,16 +157,37 @@ const KFM_ANIMATIONS: Record<string, Animation> = {
 };
 
 // --- Trigger + state helpers for the gameplay patches below ---
-const ge = (ref: string, n: number): Trigger => ({ op: 'ge', left: { ref } as never, right: { const: n } });
-const lt = (ref: string, n: number): Trigger => ({ op: 'lt', left: { ref } as never, right: { const: n } });
-const le = (ref: string, n: number): Trigger => ({ op: 'le', left: { ref } as never, right: { const: n } });
-const eq = (ref: string, n: number): Trigger => ({ op: 'eq', left: { ref } as never, right: { const: n } });
+const ge = (ref: string, n: number): Trigger => ({
+  op: 'ge',
+  left: { ref } as never,
+  right: { const: n },
+});
+const lt = (ref: string, n: number): Trigger => ({
+  op: 'lt',
+  left: { ref } as never,
+  right: { const: n },
+});
+const le = (ref: string, n: number): Trigger => ({
+  op: 'le',
+  left: { ref } as never,
+  right: { const: n },
+});
+const eq = (ref: string, n: number): Trigger => ({
+  op: 'eq',
+  left: { ref } as never,
+  right: { const: n },
+});
 const btn = (b: string): Trigger => ({ op: 'button', held: b as never });
 const cmd = (name: string): Trigger => ({ op: 'command', name });
 const and = (...args: Trigger[]): Trigger => ({ op: 'and', args });
 const or = (...args: Trigger[]): Trigger => ({ op: 'or', args });
 const not = (arg: Trigger): Trigger => ({ op: 'not', arg });
-const landed = (): Trigger => and(le('pos.y', 0), le('vel.y', 0), { op: 'gt', left: { ref: 'time' } as never, right: { const: 0 } });
+const landed = (): Trigger =>
+  and(le('pos.y', 0), le('vel.y', 0), {
+    op: 'gt',
+    left: { ref: 'time' } as never,
+    right: { const: 0 },
+  });
 const hitActive = (): Trigger => and(eq('animElem', 1), eq('animTime', 0));
 
 function hd(over: Partial<HitDef> = {}): HitDef {
@@ -212,7 +233,13 @@ const ADDED_STATES: Record<string, unknown> = {
     controllers: [
       {
         type: 'HitDef',
-        def: hd({ damage: { hit: 120, guard: 14 }, pauseTime: { p1: 12, p2: 16 }, groundVelocity: { x: 7, y: 0 }, airVelocity: { x: 5, y: 6 }, priority: 4 }),
+        def: hd({
+          damage: { hit: 120, guard: 14 },
+          pauseTime: { p1: 12, p2: 16 },
+          groundVelocity: { x: 7, y: 0 },
+          airVelocity: { x: 5, y: 6 },
+          priority: 4,
+        }),
         trigger: hitActive(),
       },
       { type: 'ChangeState', value: 'stand', ctrl: 1, trigger: ge('time', 30) },
@@ -230,7 +257,13 @@ const ADDED_STATES: Record<string, unknown> = {
         type: 'HitDef',
         // Launcher: a real upward pop that arcs back down (hitDef routes the
         // victim to the airborne hit state, which has gravity).
-        def: hd({ damage: { hit: 130, guard: 16 }, pauseTime: { p1: 12, p2: 18 }, groundVelocity: { x: 4, y: 9 }, airVelocity: { x: 4, y: 8 }, priority: 4 }),
+        def: hd({
+          damage: { hit: 130, guard: 16 },
+          pauseTime: { p1: 12, p2: 18 },
+          groundVelocity: { x: 4, y: 9 },
+          airVelocity: { x: 4, y: 8 },
+          priority: 4,
+        }),
         trigger: hitActive(),
       },
       { type: 'ChangeState', value: 'stand', ctrl: 1, trigger: ge('time', 32) },
@@ -247,7 +280,13 @@ const ADDED_STATES: Record<string, unknown> = {
     controllers: [
       {
         type: 'HitDef',
-        def: hd({ attr: { state: 'C', class: 'NA' }, damage: { hit: 78, guard: 10 }, pauseTime: { p1: 12, p2: 12 }, groundVelocity: { x: 5, y: 0 }, priority: 4 }),
+        def: hd({
+          attr: { state: 'C', class: 'NA' },
+          damage: { hit: 78, guard: 10 },
+          pauseTime: { p1: 12, p2: 12 },
+          groundVelocity: { x: 5, y: 0 },
+          priority: 4,
+        }),
         trigger: hitActive(),
       },
       { type: 'ChangeState', value: 'crouch', ctrl: 1, trigger: ge('time', 16) },
@@ -265,7 +304,14 @@ const ADDED_STATES: Record<string, unknown> = {
         type: 'HitDef',
         // Crouch light kick is the OTG poke — the one attack that hits a downed
         // opponent (up to MAX_OTG times before they're forced to wake up).
-        def: hd({ attr: { state: 'C', class: 'NA' }, damage: { hit: 26, guard: 3 }, pauseTime: { p1: 6, p2: 6 }, groundVelocity: { x: 3, y: 0 }, priority: 2, canHitDown: true }),
+        def: hd({
+          attr: { state: 'C', class: 'NA' },
+          damage: { hit: 26, guard: 3 },
+          pauseTime: { p1: 6, p2: 6 },
+          groundVelocity: { x: 3, y: 0 },
+          priority: 2,
+          canHitDown: true,
+        }),
         trigger: hitActive(),
       },
       { type: 'ChangeState', value: 'crouch', ctrl: 1, trigger: ge('time', 10) },
@@ -351,7 +397,11 @@ function patchCharge(state: { controllers: unknown[] }, button: string, target: 
   // Recover only when the button is released (otherwise stay, winding up).
   recover.trigger = and(recover.trigger, not(btn(button)));
   // Charge once held past the threshold.
-  const charge = { type: 'ChangeState', value: target, trigger: and(btn(button), ge('time', hold)) };
+  const charge = {
+    type: 'ChangeState',
+    value: target,
+    trigger: and(btn(button), ge('time', hold)),
+  };
   ctrls.splice(i, 0, charge);
 }
 
@@ -365,7 +415,12 @@ interface RawChar {
 
 function buildKFMTemplate(): Character {
   const c = structuredClone(baseChar) as unknown as RawChar;
-  c.meta = { id: 'kfm-template', name: 'KFM (action template)', author: 'BrawlBox', version: '0.1.0' };
+  c.meta = {
+    id: 'kfm-template',
+    name: 'KFM (action template)',
+    author: 'BrawlBox',
+    version: '0.1.0',
+  };
   c.animations = KFM_ANIMATIONS as unknown as Record<string, unknown>;
   // The sheet bake replaces the atlas; drop base's placeholder one so nothing
   // accidentally renders these new sprite keys against the wrong atlas.

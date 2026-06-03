@@ -110,9 +110,27 @@ function attackAnim(hitbox: { x: number; y: number; w: number; h: number }): Ani
   return {
     loop: false,
     frames: [
-      { sprite: 'punch-startup', duration: 4, offset: { x: 0, y: 0 }, hurtboxes: hurt, hitboxes: [] },
-      { sprite: 'punch-active', duration: 5, offset: { x: 0, y: 0 }, hurtboxes: hurt, hitboxes: [hitbox] },
-      { sprite: 'punch-recovery', duration: 6, offset: { x: 0, y: 0 }, hurtboxes: hurt, hitboxes: [] },
+      {
+        sprite: 'punch-startup',
+        duration: 4,
+        offset: { x: 0, y: 0 },
+        hurtboxes: hurt,
+        hitboxes: [],
+      },
+      {
+        sprite: 'punch-active',
+        duration: 5,
+        offset: { x: 0, y: 0 },
+        hurtboxes: hurt,
+        hitboxes: [hitbox],
+      },
+      {
+        sprite: 'punch-recovery',
+        duration: 6,
+        offset: { x: 0, y: 0 },
+        hurtboxes: hurt,
+        hitboxes: [],
+      },
     ],
   };
 }
@@ -121,7 +139,13 @@ function holdAnim(sprite: string): Animation {
   return {
     loop: false,
     frames: [
-      { sprite, duration: -1, offset: { x: 0, y: 0 }, hurtboxes: [{ x: -30, y: 0, w: 60, h: 100 }], hitboxes: [] },
+      {
+        sprite,
+        duration: -1,
+        offset: { x: 0, y: 0 },
+        hurtboxes: [{ x: -30, y: 0, w: 60, h: 100 }],
+        hitboxes: [],
+      },
     ],
   };
 }
@@ -311,7 +335,8 @@ function buildHonda(): Character {
   // Build power on heavy normals so the meter is reachable in a real match.
   for (const id of ['standHP', 'standHK', 'crouchHK']) {
     const st = c.states[id] as { controllers: unknown[] } | undefined;
-    if (st) st.controllers = [{ type: 'PowerAdd', value: 30, trigger: T.timeEq(0) }, ...st.controllers];
+    if (st)
+      st.controllers = [{ type: 'PowerAdd', value: 30, trigger: T.timeEq(0) }, ...st.controllers];
   }
 
   // Specials are cancel-priority over normals AND must be reachable while

@@ -17,7 +17,13 @@ import type { Character } from '@/engine/schema.ts';
 export type Sex = 'male' | 'female';
 export type BodyType = 'tiny' | 'petite' | 'normal' | 'burly' | 'giant';
 export type Physique = 'weak' | 'amateur' | 'strong' | 'master';
-export type MartialStyle = 'bajiquan' | 'boxing' | 'muaythai' | 'taekwondo' | 'wrestling' | 'wingchun';
+export type MartialStyle =
+  | 'bajiquan'
+  | 'boxing'
+  | 'muaythai'
+  | 'taekwondo'
+  | 'wrestling'
+  | 'wingchun';
 
 export interface Attributes {
   sex: Sex;

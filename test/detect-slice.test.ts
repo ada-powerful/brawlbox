@@ -78,12 +78,7 @@ describe('segmentByExpected', () => {
 
 describe('dominantBox', () => {
   test('returns the tight box of a single blob', () => {
-    const { mask: m, w, h } = mask([
-      '......',
-      '.##...',
-      '.##...',
-      '......',
-    ]);
+    const { mask: m, w, h } = mask(['......', '.##...', '.##...', '......']);
     expect(dominantBox(m, w, h, 2)).toEqual({ x: 1, y: 1, w: 2, h: 2 });
   });
 
@@ -91,25 +86,18 @@ describe('dominantBox', () => {
     // A wide lying figure on the left, plus a sliver of the next pose that bled
     // in past a real gap on the right. A plain AABB would span both (w=11);
     // dominantBox keeps only the dominant figure.
-    const { mask: m, w, h } = mask([
-      '...........',
-      '#####....#.',
-      '#####....#.',
-      '#####......',
-      '...........',
-    ]);
+    const {
+      mask: m,
+      w,
+      h,
+    } = mask(['...........', '#####....#.', '#####....#.', '#####......', '...........']);
     const box = dominantBox(m, w, h, 2);
     expect(box).toEqual({ x: 0, y: 1, w: 5, h: 3 });
   });
 
   test('merges a figure split into nearby components (a limb a few px away)', () => {
     // Body + a detached limb one column away (gap of 1) → one figure.
-    const { mask: m, w, h } = mask([
-      '........',
-      '.###.#..',
-      '.###.#..',
-      '........',
-    ]);
+    const { mask: m, w, h } = mask(['........', '.###.#..', '.###.#..', '........']);
     const box = dominantBox(m, w, h, 2);
     expect(box).toEqual({ x: 1, y: 1, w: 5, h: 2 });
   });
