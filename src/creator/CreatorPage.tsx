@@ -393,13 +393,17 @@ export function CreatorPage() {
     char: Character,
     token: string | null | undefined,
     baseUrl: string,
+    // The portraits to steer the re-skin. Passed in by the merged flow (fresh,
+    // not yet in state); falls back to whatever's in state otherwise.
+    portraitSet?: PortraitSet | null,
   ): Promise<void> => {
+    const refs = portraitSet ?? portraits;
     const fetched = await fetchSheetBitmap(
       baseUrl,
       imageDescription ?? prompt.trim(),
       token,
       tpl.backendTemplateKey,
-      portraits ? { frontUrl: portraits.front, backUrl: portraits.back } : undefined,
+      refs ? { frontUrl: refs.front, backUrl: refs.back } : undefined,
     );
     try {
       const keys = collectReferencedSprites(char);
@@ -428,6 +432,7 @@ export function CreatorPage() {
       swapAtlasUrl(URL.createObjectURL(packed.atlasBlob));
       setCharacter(sprited);
       setStatus('Sprites generated. Your fighter is ready to play.');
+      setRightTab('playtest'); // ready → bring the finished fighter into view
       void autoSave(sprited, packed.atlasBlob);
     } finally {
       fetched.bitmap.close();
@@ -454,41 +459,43 @@ export function CreatorPage() {
     }
   };
 
-  // From the uploaded photo, generate consistent front/back/headshot portraits
-  // (shown in the Portraits tab); front+back then steer the action-sheet re-skin.
-  const doGeneratePortraits = async (): Promise<void> => {
-    if (!refImage) return;
+  // Photo flow as ONE step: generate the portraits (progress shown on the
+  // Portraits tab — they appear there the moment they're ready), then chain
+  // straight into the sprite re-skin using them. When sprites finish, the sprite
+  // step flips the view to Playtest with the finished fighter loaded.
+  const generateFromPhoto = async (): Promise<void> => {
+    if (!character || !refImage) return;
     setError(null);
     setStatus(null);
     if (!API_BASE) {
-      setError('Portrait generation needs the BrawlBox API (set VITE_API_BASE_URL).');
+      setError('Generation needs the BrawlBox API (set VITE_API_BASE_URL).');
       return;
     }
     const token = await ensureToken();
     if (token === undefined) return; // redirecting to sign in
+    setRightTab('portraits'); // watch portraits land, then "generating sprites…"
+    setGeneratingId(character.meta.id); // keep the "My characters" badge up for both phases
     setPortraitBusy(true);
+    let set: PortraitSet;
     try {
-      const set = await generatePortraits(
-        API_BASE,
-        refImage,
-        imageDescription ?? prompt.trim(),
-        token,
-      );
+      set = await generatePortraits(API_BASE, refImage, imageDescription ?? prompt.trim(), token);
       setPortraits(set);
       setPortraitKeys(set.keys ?? null);
-      setRightTab('portraits');
-      // Persist the portraits onto the current record right away (the headshot is
-      // used as the character's thumbnail).
-      if (character && set.keys) void autoSave(character, undefined, set.keys);
-      setStatus('Portraits ready — see the Portraits tab, then generate sprites.');
+      // Persist the headshot/portrait keys onto the record immediately.
+      if (set.keys) void autoSave(character, undefined, set.keys);
+      setStatus('Portraits ready — now skinning your fighter…');
     } catch (e) {
       setError((e as Error).message);
+      setGeneratingId(null);
+      return;
     } finally {
       setPortraitBusy(false);
     }
+    // Reuse the fresh portraits as the look reference (state isn't updated yet).
+    await generateSprites(set);
   };
 
-  const generateSprites = async (): Promise<void> => {
+  const generateSprites = async (portraitSet?: PortraitSet | null): Promise<void> => {
     if (!character) return;
     setError(null);
     setStatus(null);
@@ -504,7 +511,7 @@ export function CreatorPage() {
       setGeneratingId(character.meta.id);
       setImgProgress({ done: 0, total: 0 });
       try {
-        await generateTemplateSprites(template, character, token, API_BASE);
+        await generateTemplateSprites(template, character, token, API_BASE, portraitSet);
       } catch (e) {
         setError((e as Error).message);
       } finally {
@@ -557,6 +564,7 @@ export function CreatorPage() {
         swapAtlasUrl(URL.createObjectURL(packed.atlasBlob));
         setCharacter(sprited);
         setStatus('Sprites generated.');
+        setRightTab('playtest'); // ready → show the finished fighter
         void autoSave(sprited, packed.atlasBlob); // update the same record with the atlas
       }
     } catch (e) {
@@ -879,19 +887,6 @@ export function CreatorPage() {
 
               {character && (
                 <>
-                  {photoMode && (
-                    <Button
-                      variant="secondary"
-                      onClick={() => void doGeneratePortraits()}
-                      disabled={busy || imgBusy || portraitBusy || !refImage}
-                    >
-                      {portraitBusy
-                        ? 'Generating portraits… (~2 min)'
-                        : portraits
-                          ? 'Regenerate portraits'
-                          : '2 · Generate portraits'}
-                    </Button>
-                  )}
                   {!BACKEND_MODE && (
                     <div className="flex items-center gap-2">
                       <Label htmlFor="model" className="text-muted-foreground whitespace-nowrap">
@@ -905,21 +900,38 @@ export function CreatorPage() {
                       />
                     </div>
                   )}
-                  <Button
-                    variant="secondary"
-                    onClick={generateSprites}
-                    disabled={busy || imgBusy || portraitBusy}
-                  >
-                    {imgBusy
-                      ? hasSprites || BACKEND_MODE
-                        ? 'Generating sprites…'
-                        : `Generating sprites… ${imgProgress?.done ?? 0}/${imgProgress?.total ?? '?'}`
-                      : `${photoMode ? '3' : '2'} · ${hasSprites ? 'Regenerate' : 'Generate'} sprites`}
-                  </Button>
+                  {photoMode ? (
+                    // One step: portraits → sprites. Status shows on the Portraits tab.
+                    <Button
+                      variant="secondary"
+                      onClick={() => void generateFromPhoto()}
+                      disabled={busy || imgBusy || portraitBusy || !refImage}
+                    >
+                      {portraitBusy
+                        ? 'Generating portraits…'
+                        : imgBusy
+                          ? 'Generating sprites…'
+                          : `2 · ${hasSprites ? 'Regenerate' : 'Generate'} portraits & sprites`}
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="secondary"
+                      onClick={() => void generateSprites()}
+                      disabled={busy || imgBusy || portraitBusy}
+                    >
+                      {imgBusy
+                        ? hasSprites || BACKEND_MODE
+                          ? 'Generating sprites…'
+                          : `Generating sprites… ${imgProgress?.done ?? 0}/${imgProgress?.total ?? '?'}`
+                        : `2 · ${hasSprites ? 'Regenerate' : 'Generate'} sprites`}
+                    </Button>
+                  )}
                   <p className="text-xs text-muted-foreground">
-                    {BACKEND_MODE
-                      ? 'Sprites are generated on the BrawlBox API (fal retexture). Takes about a minute.'
-                      : 'Sprite generation makes one image API call per animation frame (billed to your key). Takes a minute or two.'}
+                    {photoMode
+                      ? 'Generates portraits, then re-skins the fighter from them — about 2–3 minutes. Watch progress on the Portraits tab.'
+                      : BACKEND_MODE
+                        ? 'Sprites are generated on the BrawlBox API (fal retexture). Takes about a minute.'
+                        : 'Sprite generation makes one image API call per animation frame (billed to your key). Takes a minute or two.'}
                   </p>
                   {canCloud && saveState !== 'idle' && (
                     <p
@@ -1191,41 +1203,55 @@ export function CreatorPage() {
               ))}
 
             {rightTab === 'portraits' &&
-              (portraits ? (
-                <>
-                  <div className="grid grid-cols-3 gap-2">
-                    {(
-                      [
-                        ['Front', portraits.front],
-                        ['Back', portraits.back],
-                        ['Headshot', portraits.headshot],
-                      ] as const
-                    ).map(([label, url]) => (
-                      <a
-                        key={label}
-                        href={url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="flex flex-col items-center gap-1"
-                      >
-                        <img
-                          src={url}
-                          alt={label}
-                          className="aspect-[3/4] w-full rounded-md border border-input bg-white object-contain"
-                        />
-                        <span className="text-xs text-muted-foreground">{label}</span>
-                      </a>
-                    ))}
-                  </div>
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    Generated from your reference. Front &amp; back skin the fighter; the headshot
-                    is used as this character's thumbnail.
-                  </p>
-                </>
+              (portraitBusy || portraits || imgBusy ? (
+                <div className="flex flex-col gap-3">
+                  {portraitBusy && !portraits && (
+                    <p className="animate-pulse text-sm text-primary">
+                      ● Generating portraits… (~1–2 min)
+                    </p>
+                  )}
+                  {portraits && (
+                    <>
+                      <div className="grid grid-cols-3 gap-2">
+                        {(
+                          [
+                            ['Front', portraits.front],
+                            ['Back', portraits.back],
+                            ['Headshot', portraits.headshot],
+                          ] as const
+                        ).map(([label, url]) => (
+                          <a
+                            key={label}
+                            href={url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="flex flex-col items-center gap-1"
+                          >
+                            <img
+                              src={url}
+                              alt={label}
+                              className="aspect-[3/4] w-full rounded-md border border-input bg-white object-contain"
+                            />
+                            <span className="text-xs text-muted-foreground">{label}</span>
+                          </a>
+                        ))}
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Generated from your reference. Front &amp; back skin the fighter; the
+                        headshot is used as this character's thumbnail.
+                      </p>
+                    </>
+                  )}
+                  {imgBusy && (
+                    <p className="animate-pulse text-sm text-primary">
+                      ● Skinning the fighter (generating sprites)… it'll open in Playtest when ready.
+                    </p>
+                  )}
+                </div>
               ) : (
                 <p className="text-sm text-muted-foreground">
-                  No portraits yet. Create a fighter “From a photo”, then generate portraits to get
-                  consistent front/back/headshot art.
+                  No portraits yet. Create a fighter “From a photo”, then generate portraits &amp;
+                  sprites to get consistent front/back/headshot art.
                 </p>
               ))}
           </CardContent>

@@ -17,6 +17,7 @@ interface RosterEntry {
   name: string;
   character: Character;
   atlasUrl?: string;
+  headshotUrl?: string;
 }
 
 // The built-in roster. Currently just the hand-authored base fighter; structured
@@ -38,6 +39,7 @@ export function GamePage() {
         name: c.name,
         character: c.character,
         atlasUrl: c.atlasUrl,
+        headshotUrl: c.portraitHeadshotUrl,
       })),
   ];
 
@@ -165,7 +167,12 @@ function SlotPicker({
               selectedId === r.id ? 'border-primary bg-secondary/60 font-semibold' : 'border-border'
             }`}
           >
-            <Headshot character={r.character} atlasUrl={r.atlasUrl} name={r.name} />
+            <Headshot
+              character={r.character}
+              atlasUrl={r.atlasUrl}
+              headshotUrl={r.headshotUrl}
+              name={r.name}
+            />
             <span className="truncate">{r.name}</span>
           </button>
         ))}
