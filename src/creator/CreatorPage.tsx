@@ -95,15 +95,18 @@ export function CreatorPage() {
   const [remember, setRemember] = useState(false);
   // How the next fighter is created: from a text prompt, or from a reference
   // photo (separate flows with different steps — see the controls below).
-  const [mode, setMode] = useState<Mode>('attributes');
+  const [mode, setMode] = useState<Mode>('photo');
   // Structured builder inputs (sex / body / physique / style) for "From attributes".
   const [attrs, setAttrs] = useState<Attributes>(DEFAULT_ATTRIBUTES);
+  // Free-text look details the attributes don't cover (e.g. clothing, scars,
+  // hair). Appended to the attribute-derived description fed to image gen.
+  const [lookNotes, setLookNotes] = useState('');
   // Which template the new fighter is built from. A real template reuses its
   // base character's gameplay and only re-skins the art (NB2); FREEFORM_ID keeps
   // the legacy "AI designs a brand-new character" path.
   const [templateId, setTemplateId] = useState<string>(DEFAULT_TEMPLATE_ID);
   const template: CharacterTemplate | undefined = getTemplate(templateId);
-  const [prompt, setPrompt] = useState(EXAMPLE);
+  const [prompt, setPrompt] = useState('');
   const [busy, setBusy] = useState(false);
   const [imgBusy, setImgBusy] = useState(false);
   // characterId whose sprites are currently generating. While set, that fighter
@@ -279,7 +282,7 @@ export function CreatorPage() {
     if (mode === 'attributes') {
       base = applyAttributeStats(tpl.base, attrs);
       name = attributesToName(attrs);
-      described = attributesToDescription(attrs);
+      described = attributesToDescription(attrs, lookNotes);
     } else if (refImage && BACKEND_MODE && API_BASE) {
       // Photo mode: gpt-5.5 names + describes the character from the image.
       const token = await ensureToken();
@@ -348,7 +351,8 @@ export function CreatorPage() {
       // A reference photo can drive a freeform design too: describe it first so
       // the LLM gets an appearance prompt even when the notes box is left empty.
       // In attributes mode the structured choices become the design prompt.
-      let designPrompt = mode === 'attributes' ? attributesToDescription(attrs) : prompt.trim();
+      let designPrompt =
+      mode === 'attributes' ? attributesToDescription(attrs, lookNotes) : prompt.trim();
       if (mode === 'photo' && refImage && BACKEND_MODE && API_BASE) {
         setStatus('Reading your photo…');
         try {
@@ -787,7 +791,22 @@ export function CreatorPage() {
               {/* Attributes mode: structured choices define the fighter (stats +
                   art). Photo mode: notes are optional and steer the look. */}
               {!photoMode ? (
-                <AttributePicker attrs={attrs} onChange={setAttrs} disabled={busy || imgBusy} />
+                <>
+                  <AttributePicker attrs={attrs} onChange={setAttrs} disabled={busy || imgBusy} />
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="looknotes" className="text-muted-foreground">
+                      Extra details (optional)
+                    </Label>
+                    <Textarea
+                      id="looknotes"
+                      rows={2}
+                      value={lookNotes}
+                      onChange={(e) => setLookNotes(e.target.value)}
+                      disabled={busy || imgBusy}
+                      placeholder="Anything the options don't cover — clothing, hair, colors, gear, vibe…"
+                    />
+                  </div>
+                </>
               ) : (
                 <>
                   <div

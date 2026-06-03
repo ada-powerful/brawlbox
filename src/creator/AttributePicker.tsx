@@ -90,35 +90,37 @@ export function AttributePicker({
         </Field>
       </div>
 
-      <Field label="Body type">
-        <select
-          className={SELECT}
-          value={attrs.body}
-          disabled={disabled}
-          onChange={(e) => set('body', e.target.value as BodyType)}
-        >
-          {(Object.keys(BODY) as BodyType[]).map((k) => (
-            <option key={k} value={k} className={OPT}>
-              {BODY[k].label}
-            </option>
-          ))}
-        </select>
-      </Field>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Body type">
+          <select
+            className={SELECT}
+            value={attrs.body}
+            disabled={disabled}
+            onChange={(e) => set('body', e.target.value as BodyType)}
+          >
+            {(Object.keys(BODY) as BodyType[]).map((k) => (
+              <option key={k} value={k} className={OPT}>
+                {BODY[k].label}
+              </option>
+            ))}
+          </select>
+        </Field>
 
-      <Field label="Physique">
-        <select
-          className={SELECT}
-          value={attrs.physique}
-          disabled={disabled}
-          onChange={(e) => set('physique', e.target.value as Physique)}
-        >
-          {(Object.keys(PHYSIQUE) as Physique[]).map((k) => (
-            <option key={k} value={k} className={OPT}>
-              {PHYSIQUE[k].label}
-            </option>
-          ))}
-        </select>
-      </Field>
+        <Field label="Physique">
+          <select
+            className={SELECT}
+            value={attrs.physique}
+            disabled={disabled}
+            onChange={(e) => set('physique', e.target.value as Physique)}
+          >
+            {(Object.keys(PHYSIQUE) as Physique[]).map((k) => (
+              <option key={k} value={k} className={OPT}>
+                {PHYSIQUE[k].label}
+              </option>
+            ))}
+          </select>
+        </Field>
+      </div>
 
       <p className="text-xs text-muted-foreground">{attributesToDescription(attrs)}</p>
     </div>

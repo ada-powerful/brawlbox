@@ -269,13 +269,20 @@ export function applyAttributes(base: Character, attrs: Attributes): Character {
   };
 }
 
-/** A one-line appearance description for image generation + naming. */
-export function attributesToDescription(attrs: Attributes): string {
+/**
+ * A one-line appearance description for image generation + naming. `extra` is
+ * the user's free-text note (look details the attributes don't cover, e.g.
+ * "red lacquered armor and a scar"); when present it's appended to the
+ * attribute-derived sentence.
+ */
+export function attributesToDescription(attrs: Attributes, extra?: string): string {
   const sex = SEX[attrs.sex].noun;
   const body = BODY[attrs.body].build;
   const build = PHYSIQUE[attrs.physique].build;
   const style = STYLE[attrs.style].art;
-  return `A ${body} ${sex}, ${build}, ${style}.`;
+  const base = `A ${body} ${sex}, ${build}, ${style}.`;
+  const note = extra?.trim();
+  return note ? `${base} ${note}` : base;
 }
 
 /** A sensible default fighter name from the chosen attributes. */
