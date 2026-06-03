@@ -10,10 +10,21 @@ export interface CloudCharacter {
   createdAt: number;
   /** Presigned GET URL for the atlas PNG (CORS-clean, ~1h). */
   atlasUrl?: string;
+  /** Presigned GET URLs for the saved portrait set (CORS-clean, ~1h). */
+  portraitFrontUrl?: string;
+  portraitBackUrl?: string;
+  portraitHeadshotUrl?: string;
   /** Whether this character is published to the public gallery. */
   shared?: boolean;
   /** Whether the owner has archived (hidden) this character. */
   archived?: boolean;
+}
+
+/** S3 keys of a generated portrait set, persisted with the character. */
+export interface PortraitKeys {
+  front: string;
+  back: string;
+  headshot: string;
 }
 
 async function blobToBase64(blob: Blob): Promise<string> {
@@ -42,13 +53,18 @@ export async function listCloudCharacters(
 export async function saveCloudCharacter(
   baseUrl: string,
   token: string,
-  input: { character: Character; name: string; atlas?: Blob },
+  input: { character: Character; name: string; atlas?: Blob; portraitKeys?: PortraitKeys },
 ): Promise<void> {
   const atlas = input.atlas ? await blobToBase64(input.atlas) : undefined;
   const res = await fetch(`${baseUrl}/characters`, {
     method: 'POST',
     headers: authHeaders(token),
-    body: JSON.stringify({ character: input.character, name: input.name, atlas }),
+    body: JSON.stringify({
+      character: input.character,
+      name: input.name,
+      atlas,
+      portraitKeys: input.portraitKeys,
+    }),
   });
   if (!res.ok) throw new Error(`Saving failed (${res.status})`);
 }

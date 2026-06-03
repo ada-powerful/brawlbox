@@ -35,6 +35,9 @@ import type { Character } from '@/engine/schema.ts';
 import { Playtest } from '@/creator/Playtest.tsx';
 import { Headshot } from '@/creator/Headshot.tsx';
 import { FrameReview } from '@/creator/FrameReview.tsx';
+import { AttributesForm } from '@/creator/AttributesForm.tsx';
+import { IdlePreview } from '@/creator/IdlePreview.tsx';
+import { P1_COLOR } from '@/creator/defaults.ts';
 import {
   saveCloudCharacter,
   deleteCloudCharacter,
@@ -42,6 +45,7 @@ import {
   archiveCloudCharacter,
   shareCloudCharacter,
   type CloudCharacter,
+  type PortraitKeys,
 } from '@/creator/store/cloud.ts';
 import { API_BASE, AUTH_ENABLED, BACKEND_MODE, CAN_CLOUD } from '@/app/config.ts';
 import { useSession } from '@/app/session.ts';
@@ -61,12 +65,29 @@ const ENV_KEY = getEnvKey();
 // Image model; the project validated gpt-image-2. Override with VITE_IMAGE_MODEL.
 const IMAGE_MODEL = (import.meta.env?.VITE_IMAGE_MODEL as string | undefined) || 'gpt-image-2';
 
+// The two generation flows are genuinely different processes, so the UI splits
+// them up front rather than inferring from "did you upload a photo?".
+type Mode = 'prompt' | 'photo';
+type RightTab = 'playtest' | 'attributes' | 'portraits';
+
+// Assemble a portrait set from a loaded character's presigned URLs, or null when
+// the record has no saved portraits.
+function portraitsFromCloud(c: CloudCharacter): PortraitSet | null {
+  if (c.portraitFrontUrl && c.portraitBackUrl && c.portraitHeadshotUrl) {
+    return { front: c.portraitFrontUrl, back: c.portraitBackUrl, headshot: c.portraitHeadshotUrl };
+  }
+  return null;
+}
+
 export function CreatorPage() {
   // Shared session (auth + saved characters + gallery) from the layout.
   const { user, saved, savedError, refreshSaved, gallery, refreshGallery } = useSession();
 
   const [apiKey, setApiKey] = useState('');
   const [remember, setRemember] = useState(false);
+  // How the next fighter is created: from a text prompt, or from a reference
+  // photo (separate flows with different steps — see the controls below).
+  const [mode, setMode] = useState<Mode>('prompt');
   // Which template the new fighter is built from. A real template reuses its
   // base character's gameplay and only re-skins the art (NB2); FREEFORM_ID keeps
   // the legacy "AI designs a brand-new character" path.
@@ -82,9 +103,17 @@ export function CreatorPage() {
   const [generatingId, setGeneratingId] = useState<string | null>(null);
   // Optional uploaded reference photo (data URI) + the NB2 portrait set generated
   // from it. front+back feed the action sheet so every pose stays on-model; the
-  // headshot is shown for later in-game use. All three render in the create view.
+  // headshot is shown for later in-game use. All three render in the Portraits tab.
   const [refImage, setRefImage] = useState<string | null>(null);
   const [portraits, setPortraits] = useState<PortraitSet | null>(null);
+  // S3 keys of the current portrait set, persisted with the character so the
+  // headshot/full-body views survive a reload. Mirrored into a ref so auto-save
+  // (called from several closures) always sees the latest set.
+  const [portraitKeys, setPortraitKeys] = useState<PortraitKeys | null>(null);
+  const portraitKeysRef = useRef<PortraitKeys | null>(null);
+  useEffect(() => {
+    portraitKeysRef.current = portraitKeys;
+  }, [portraitKeys]);
   const [portraitBusy, setPortraitBusy] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   // gpt-5.5-generated appearance description (from the uploaded image + notes).
@@ -96,11 +125,15 @@ export function CreatorPage() {
   const [status, setStatus] = useState<string | null>(null);
   const [character, setCharacter] = useState<Character | null>(null);
   const [atlasUrl, setAtlasUrl] = useState<string | undefined>(undefined);
-  const [json, setJson] = useState('');
   const [model, setModel] = useState(IMAGE_MODEL);
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null);
   const [showArchived, setShowArchived] = useState(false);
+  // Which view fills the right-hand panel.
+  const [rightTab, setRightTab] = useState<RightTab>('playtest');
+  // Draft-applied character for the live idle preview in the Attributes tab.
+  // Not persisted — only "Save changes" commits (via applyAttributes).
+  const [previewCharacter, setPreviewCharacter] = useState<Character | null>(null);
   // M2.3 frame-review: the retextured sheet (backend path) + the editable
   // spriteKey→frame mapping. `repacking` guards the console during a re-pack.
   const [sheet, setSheet] = useState<DetectedSheet | null>(null);
@@ -151,6 +184,25 @@ export function CreatorPage() {
     else clearKey();
   };
 
+  // Switching the creation mode resets the inputs that don't belong to the new
+  // flow, so the two processes never bleed into each other.
+  const switchMode = (next: Mode): void => {
+    if (next === mode) return;
+    setMode(next);
+    setError(null);
+    if (next === 'prompt') {
+      // Drop the photo + anything derived from it.
+      setRefImage(null);
+      setPortraits(null);
+      setPortraitKeys(null);
+      setImageDescription(null);
+      if (!prompt.trim()) setPrompt(EXAMPLE);
+    } else {
+      // Photo drives the look; clear the example prompt so the notes box is empty.
+      if (prompt === EXAMPLE) setPrompt('');
+    }
+  };
+
   // Swap in a new atlas object URL, revoking the previous one.
   const swapAtlasUrl = (next: string | undefined): void => {
     setAtlasUrl((prev) => {
@@ -192,7 +244,6 @@ export function CreatorPage() {
     );
     swapAtlasUrl(URL.createObjectURL(packed.atlasBlob));
     setCharacter(sprited);
-    setJson(JSON.stringify(sprited, null, 2));
     void autoSave(sprited, packed.atlasBlob);
   };
 
@@ -236,7 +287,6 @@ export function CreatorPage() {
     swapAtlasUrl(undefined); // new config => drop old sprites
     setSheet(null); // and the old review sheet
     setCharacter(newChar);
-    setJson(JSON.stringify(newChar, null, 2));
     setStatus(
       described
         ? `Designed “${name}” — ${described}. Now generate portraits, then sprites.`
@@ -248,12 +298,19 @@ export function CreatorPage() {
   const generate = async (): Promise<void> => {
     setError(null);
     setStatus(null);
-    // Two ways in: a reference photo (the image drives the look, notes optional)
-    // or a text prompt. One of them is required; the photo alone is enough.
-    if (!prompt.trim() && !refImage) {
-      setError('Describe your fighter, or upload a reference photo.');
+    // Validate per the active flow: a prompt is required in prompt mode, a photo
+    // in photo mode.
+    if (mode === 'photo' && !refImage) {
+      setError('Upload a reference photo, or switch to “From a prompt”.');
       return;
     }
+    if (mode === 'prompt' && !prompt.trim()) {
+      setError('Describe your fighter.');
+      return;
+    }
+    // A brand-new fighter; clear any previous portrait set so it can't carry over.
+    setPortraits(null);
+    setPortraitKeys(null);
     // Template-based creation: clone the base (+ name/describe from the photo).
     if (template) {
       setBusy(true);
@@ -283,7 +340,8 @@ export function CreatorPage() {
         setStatus('Reading your photo…');
         try {
           const idea = await describeFromImage(API_BASE, refImage, prompt.trim(), token);
-          designPrompt = [idea.description, prompt.trim()].filter(Boolean).join(' — ') || designPrompt;
+          designPrompt =
+            [idea.description, prompt.trim()].filter(Boolean).join(' — ') || designPrompt;
         } catch (e) {
           // Non-fatal: fall back to whatever notes were typed.
           setError(`Couldn't read the photo (using your notes): ${(e as Error).message}`);
@@ -299,7 +357,6 @@ export function CreatorPage() {
       swapAtlasUrl(undefined); // new config => drop old sprites
       setSheet(null); // and the old review sheet
       setCharacter(newChar);
-      setJson(JSON.stringify(newChar, null, 2));
       setStatus(
         `Valid character generated in ${result.attempts} attempt(s). Now generate sprites.`,
       );
@@ -353,8 +410,7 @@ export function CreatorPage() {
       );
       swapAtlasUrl(URL.createObjectURL(packed.atlasBlob));
       setCharacter(sprited);
-      setJson(JSON.stringify(sprited, null, 2));
-      setStatus('Sprites generated. Your fighter is ready to play below.');
+      setStatus('Sprites generated. Your fighter is ready to play.');
       void autoSave(sprited, packed.atlasBlob);
     } finally {
       fetched.bitmap.close();
@@ -371,6 +427,7 @@ export function CreatorPage() {
       const dataUri = await fileToDataUri(file);
       setRefImage(dataUri);
       setPortraits(null);
+      setPortraitKeys(null);
       setImageDescription(null);
       // The photo defines the look now — clear the (optional) text prompt; the
       // name + description are auto-generated from the image on "Use template".
@@ -381,7 +438,7 @@ export function CreatorPage() {
   };
 
   // From the uploaded photo, generate consistent front/back/headshot portraits
-  // (shown in the create view); front+back then steer the action-sheet re-skin.
+  // (shown in the Portraits tab); front+back then steer the action-sheet re-skin.
   const doGeneratePortraits = async (): Promise<void> => {
     if (!refImage) return;
     setError(null);
@@ -394,9 +451,19 @@ export function CreatorPage() {
     if (token === undefined) return; // redirecting to sign in
     setPortraitBusy(true);
     try {
-      const set = await generatePortraits(API_BASE, refImage, imageDescription ?? prompt.trim(), token);
+      const set = await generatePortraits(
+        API_BASE,
+        refImage,
+        imageDescription ?? prompt.trim(),
+        token,
+      );
       setPortraits(set);
-      setStatus('Portraits ready — review them below, then generate sprites.');
+      setPortraitKeys(set.keys ?? null);
+      setRightTab('portraits');
+      // Persist the portraits onto the current record right away (the headshot is
+      // used as the character's thumbnail).
+      if (character && set.keys) void autoSave(character, undefined, set.keys);
+      setStatus('Portraits ready — see the Portraits tab, then generate sprites.');
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -472,7 +539,6 @@ export function CreatorPage() {
         );
         swapAtlasUrl(URL.createObjectURL(packed.atlasBlob));
         setCharacter(sprited);
-        setJson(JSON.stringify(sprited, null, 2));
         setStatus('Sprites generated.');
         void autoSave(sprited, packed.atlasBlob); // update the same record with the atlas
       }
@@ -488,8 +554,14 @@ export function CreatorPage() {
   // Persist the current character to the cloud automatically. Keyed by meta.id
   // (unique per generation, see withUniqueId), so the post-generation save and
   // the post-sprite save update the SAME record instead of creating duplicates.
+  // Portrait keys ride along (latest known set) so the saved record keeps its
+  // headshot/full-body art; the backend preserves stored keys when none is sent.
   // Non-fatal: a failure shows an indicator but never blocks generation.
-  const autoSave = async (char: Character, atlas?: Blob | null): Promise<void> => {
+  const autoSave = async (
+    char: Character,
+    atlas?: Blob | null,
+    portraitKeysOverride?: PortraitKeys | null,
+  ): Promise<void> => {
     if (!canCloud || !API_BASE) return;
     setSaveState('saving');
     try {
@@ -502,6 +574,7 @@ export function CreatorPage() {
         character: char,
         name: char.meta.name,
         atlas: atlas ?? undefined,
+        portraitKeys: portraitKeysOverride ?? portraitKeysRef.current ?? undefined,
       });
       setSaveState('saved');
       await refreshSaved();
@@ -510,14 +583,23 @@ export function CreatorPage() {
     }
   };
 
+  // Commit edited attributes: update the live character (the playtest canvas
+  // re-renders with the new stats) and persist. We don't have the atlas blob in
+  // hand for a loaded fighter, but the atlas key is deterministic so it's kept.
+  const applyAttributes = (next: Character): void => {
+    setCharacter(next);
+    setStatus('Attributes updated.');
+    void autoSave(next);
+  };
+
   const loadSaved = (c: CloudCharacter): void => {
     // Locked while a fighter is mid-generation: switching would swap the working
     // character out from under the running bake, and the in-progress fighter has
     // no usable atlas yet anyway.
     if (imgBusy || portraitBusy) return;
-    setPortraits(null); // portraits belong to the fighter that produced them
     setCharacter(c.character);
-    setJson(JSON.stringify(c.character, null, 2));
+    setPortraits(portraitsFromCloud(c)); // show its saved portraits, if any
+    setPortraitKeys(null); // keys aren't returned; the backend preserves them on save
     setSaveState('idle'); // a loaded character is already persisted
     setSheet(null); // a saved character has no source sheet to review
     swapAtlasUrl(c.atlasUrl); // presigned URL; loadAtlasTextures fetches it
@@ -552,9 +634,7 @@ export function CreatorPage() {
       await renameCloudCharacter(API_BASE, token, id, trimmed);
       // Keep the loaded character's name in sync if it's the one being renamed.
       if (character?.meta.id === id) {
-        const next = { ...character, meta: { ...character.meta, name: trimmed } };
-        setCharacter(next);
-        setJson(JSON.stringify(next, null, 2));
+        setCharacter({ ...character, meta: { ...character.meta, name: trimmed } });
       }
       await refreshSaved();
       await refreshGallery();
@@ -589,24 +669,15 @@ export function CreatorPage() {
     }
   };
 
-  const download = (): void => {
-    const blob = new Blob([json], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${character?.meta.id ?? 'character'}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
   const hasSprites = Boolean(atlasUrl);
   const activeSaved = saved.filter((c) => !c.archived);
   const archivedSaved = saved.filter((c) => c.archived);
+  const photoMode = mode === 'photo';
 
   return (
     <>
       <p className="text-sm text-muted-foreground">
-        Describe a fighter and generate it, or{' '}
+        Create a fighter from a prompt or a photo, or{' '}
         <Link to="/play" className="text-primary hover:underline">
           skip and play with the built-in characters
         </Link>
@@ -653,9 +724,32 @@ export function CreatorPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Describe your fighter</CardTitle>
+              <CardTitle>Create your fighter</CardTitle>
             </CardHeader>
             <CardContent className="flex flex-col gap-3">
+              {/* Mode toggle: two distinct creation flows. */}
+              <div className="grid grid-cols-2 gap-1 rounded-md bg-secondary/50 p-1">
+                {(
+                  [
+                    ['prompt', 'From a prompt'],
+                    ['photo', 'From a photo'],
+                  ] as const
+                ).map(([m, label]) => (
+                  <button
+                    key={m}
+                    onClick={() => switchMode(m)}
+                    disabled={busy || imgBusy || portraitBusy}
+                    className={`rounded px-3 py-1.5 text-sm font-medium transition-colors disabled:opacity-50 ${
+                      mode === m
+                        ? 'bg-background shadow-sm'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="template" className="text-muted-foreground">
                   Template
@@ -676,61 +770,86 @@ export function CreatorPage() {
                 </select>
                 {template && <p className="text-xs text-muted-foreground">{template.hint}</p>}
               </div>
-              <Textarea
-                rows={4}
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                placeholder={
-                  refImage
-                    ? 'Optional — add notes to steer the look; the name & description come from your photo'
-                    : template
-                      ? 'Describe how your fighter LOOKS — e.g. a grizzled ronin in red lacquered armor'
-                      : EXAMPLE
-                }
-              />
-              <div
-                className={`flex flex-col gap-1.5 rounded-md border border-dashed p-3 transition-colors ${
-                  dragOver ? 'border-primary bg-secondary/40' : 'border-input'
-                }`}
-                onDragOver={(e) => {
-                  e.preventDefault();
-                  if (!busy && !imgBusy && !portraitBusy) setDragOver(true);
-                }}
-                onDragLeave={() => setDragOver(false)}
-                onDrop={(e) => {
-                  e.preventDefault();
-                  setDragOver(false);
-                  if (busy || imgBusy || portraitBusy) return;
-                  const file = Array.from(e.dataTransfer.files).find((f) =>
-                    f.type.startsWith('image/'),
-                  );
-                  if (file) void onPickImage(file);
-                  else setError('Drop an image file (PNG/JPG).');
-                }}
-              >
-                <Label htmlFor="refimg" className="text-muted-foreground">
-                  Reference photo (optional)
-                </Label>
-                <input
-                  id="refimg"
-                  type="file"
-                  accept="image/*"
-                  disabled={busy || imgBusy || portraitBusy}
-                  onChange={(e) => void onPickImage(e.target.files?.[0])}
-                  className="text-xs text-muted-foreground file:mr-2 file:rounded-md file:border-0 file:bg-secondary file:px-3 file:py-1 file:text-sm"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Drag &amp; drop or choose a face or full-body photo — we generate matching
-                  front/back/headshot art and use it to skin your fighter.
-                </p>
-                {refImage && (
-                  <img
-                    src={refImage}
-                    alt="reference"
-                    className="mt-1 h-28 w-auto rounded-md border border-input object-contain"
+
+              {/* Prompt mode: the description IS the input. Photo mode: notes are
+                  optional and steer the look extracted from the photo. */}
+              {!photoMode ? (
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="prompt" className="text-muted-foreground">
+                    Describe your fighter
+                  </Label>
+                  <Textarea
+                    id="prompt"
+                    rows={4}
+                    value={prompt}
+                    onChange={(e) => setPrompt(e.target.value)}
+                    placeholder={
+                      template
+                        ? 'Describe how your fighter LOOKS — e.g. a grizzled ronin in red lacquered armor'
+                        : EXAMPLE
+                    }
                   />
-                )}
-              </div>
+                </div>
+              ) : (
+                <>
+                  <div
+                    className={`flex flex-col gap-1.5 rounded-md border border-dashed p-3 transition-colors ${
+                      dragOver ? 'border-primary bg-secondary/40' : 'border-input'
+                    }`}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      if (!busy && !imgBusy && !portraitBusy) setDragOver(true);
+                    }}
+                    onDragLeave={() => setDragOver(false)}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      setDragOver(false);
+                      if (busy || imgBusy || portraitBusy) return;
+                      const file = Array.from(e.dataTransfer.files).find((f) =>
+                        f.type.startsWith('image/'),
+                      );
+                      if (file) void onPickImage(file);
+                      else setError('Drop an image file (PNG/JPG).');
+                    }}
+                  >
+                    <Label htmlFor="refimg" className="text-muted-foreground">
+                      Reference photo
+                    </Label>
+                    <input
+                      id="refimg"
+                      type="file"
+                      accept="image/*"
+                      disabled={busy || imgBusy || portraitBusy}
+                      onChange={(e) => void onPickImage(e.target.files?.[0])}
+                      className="text-xs text-muted-foreground file:mr-2 file:rounded-md file:border-0 file:bg-secondary file:px-3 file:py-1 file:text-sm"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Drag &amp; drop or choose a face or full-body photo — we generate matching
+                      front/back/headshot art and use it to skin your fighter.
+                    </p>
+                    {refImage && (
+                      <img
+                        src={refImage}
+                        alt="reference"
+                        className="mt-1 h-28 w-auto rounded-md border border-input object-contain"
+                      />
+                    )}
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="notes" className="text-muted-foreground">
+                      Notes (optional)
+                    </Label>
+                    <Textarea
+                      id="notes"
+                      rows={2}
+                      value={prompt}
+                      onChange={(e) => setPrompt(e.target.value)}
+                      placeholder="Add notes to steer the look; the name & description come from your photo"
+                    />
+                  </div>
+                </>
+              )}
+
               <Button onClick={generate} disabled={busy || imgBusy || portraitBusy}>
                 {busy
                   ? template
@@ -743,11 +862,11 @@ export function CreatorPage() {
 
               {character && (
                 <>
-                  {refImage && (
+                  {photoMode && (
                     <Button
                       variant="secondary"
                       onClick={() => void doGeneratePortraits()}
-                      disabled={busy || imgBusy || portraitBusy}
+                      disabled={busy || imgBusy || portraitBusy || !refImage}
                     >
                       {portraitBusy
                         ? 'Generating portraits… (~2 min)'
@@ -778,7 +897,7 @@ export function CreatorPage() {
                       ? hasSprites || BACKEND_MODE
                         ? 'Generating sprites…'
                         : `Generating sprites… ${imgProgress?.done ?? 0}/${imgProgress?.total ?? '?'}`
-                      : `${refImage ? '3' : '2'} · ${hasSprites ? 'Regenerate' : 'Generate'} sprites`}
+                      : `${photoMode ? '3' : '2'} · ${hasSprites ? 'Regenerate' : 'Generate'} sprites`}
                   </Button>
                   <p className="text-xs text-muted-foreground">
                     {BACKEND_MODE
@@ -808,60 +927,6 @@ export function CreatorPage() {
             </CardContent>
           </Card>
 
-          {portraits && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Portraits</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-3 gap-2">
-                  {(
-                    [
-                      ['Front', portraits.front],
-                      ['Back', portraits.back],
-                      ['Headshot', portraits.headshot],
-                    ] as const
-                  ).map(([label, url]) => (
-                    <a
-                      key={label}
-                      href={url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="flex flex-col items-center gap-1"
-                    >
-                      <img
-                        src={url}
-                        alt={label}
-                        className="aspect-[3/4] w-full rounded-md border border-input bg-white object-contain"
-                      />
-                      <span className="text-xs text-muted-foreground">{label}</span>
-                    </a>
-                  ))}
-                </div>
-                <p className="mt-2 text-xs text-muted-foreground">
-                  Generated from your reference. Front &amp; back skin the fighter; the headshot is
-                  kept for in-game use.
-                </p>
-              </CardContent>
-            </Card>
-          )}
-
-          {json && (
-            <Card className="flex-1">
-              <CardHeader className="flex-row items-center justify-between space-y-0">
-                <CardTitle>character.json</CardTitle>
-                <Button size="sm" variant="outline" onClick={download}>
-                  Download
-                </Button>
-              </CardHeader>
-              <CardContent>
-                <pre className="max-h-[340px] overflow-auto rounded-md bg-secondary/40 p-3 text-xs leading-relaxed">
-                  {json}
-                </pre>
-              </CardContent>
-            </Card>
-          )}
-
           {canCloud && user && (
             <Card>
               <CardHeader>
@@ -883,7 +948,12 @@ export function CreatorPage() {
                       key={c.characterId}
                       className={`flex items-center gap-2 ${isGenerating || locked ? 'opacity-70' : ''}`}
                     >
-                      <Headshot character={c.character} atlasUrl={c.atlasUrl} name={c.name} />
+                      <Headshot
+                        character={c.character}
+                        atlasUrl={c.atlasUrl}
+                        headshotUrl={c.portraitHeadshotUrl}
+                        name={c.name}
+                      />
                       {isGenerating ? (
                         <span className="flex-1 truncate text-sm font-medium">
                           {c.name}
@@ -965,7 +1035,12 @@ export function CreatorPage() {
                     {showArchived &&
                       archivedSaved.map((c) => (
                         <div key={c.characterId} className="flex items-center gap-2 opacity-70">
-                          <Headshot character={c.character} atlasUrl={c.atlasUrl} name={c.name} />
+                          <Headshot
+                            character={c.character}
+                            atlasUrl={c.atlasUrl}
+                            headshotUrl={c.portraitHeadshotUrl}
+                            name={c.name}
+                          />
                           <span className="flex-1 truncate text-sm">{c.name}</span>
                           <div className="flex shrink-0 items-center gap-1">
                             <Button
@@ -997,40 +1072,145 @@ export function CreatorPage() {
               <CardHeader>
                 <CardTitle>Gallery</CardTitle>
               </CardHeader>
-              <CardContent className="flex flex-col gap-1">
+              <CardContent className="flex flex-col gap-2">
                 {gallery.map((c) => (
-                  <button
-                    key={c.characterId}
-                    className={`truncate text-left text-sm ${imgBusy ? 'cursor-not-allowed opacity-70' : 'hover:underline'}`}
-                    onClick={() => loadSaved(c)}
-                    disabled={imgBusy}
-                  >
-                    {c.name}
-                  </button>
+                  <div key={c.characterId} className="flex items-center gap-2">
+                    <Headshot
+                      character={c.character}
+                      atlasUrl={c.atlasUrl}
+                      headshotUrl={c.portraitHeadshotUrl}
+                      name={c.name}
+                    />
+                    <button
+                      className={`flex-1 truncate text-left text-sm ${imgBusy ? 'cursor-not-allowed opacity-70' : 'hover:underline'}`}
+                      onClick={() => loadSaved(c)}
+                      disabled={imgBusy}
+                    >
+                      {c.name}
+                    </button>
+                  </div>
                 ))}
               </CardContent>
             </Card>
           )}
         </div>
 
-        {/* Playtest */}
+        {/* Right panel: Playtest / Attributes / Portraits */}
         <Card className="flex flex-col">
           <CardHeader className="flex-row items-center justify-between space-y-0">
-            <CardTitle>Playtest</CardTitle>
-            <span className="text-xs text-muted-foreground">
-              P1: WASD + J/K/L · P2: arrows + numpad · R restart · F1 debug
-            </span>
+            <div className="flex gap-1 rounded-md bg-secondary/50 p-1">
+              {(
+                [
+                  ['playtest', 'Playtest'],
+                  ['attributes', 'Attributes'],
+                  ['portraits', 'Portraits'],
+                ] as const
+              ).map(([t, label]) => (
+                <button
+                  key={t}
+                  onClick={() => setRightTab(t)}
+                  className={`rounded px-3 py-1 text-sm font-medium transition-colors ${
+                    rightTab === t
+                      ? 'bg-background shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            {rightTab === 'playtest' && (
+              <span className="hidden text-xs text-muted-foreground sm:inline">
+                P1: WASD + J/K/L · P2: arrows + numpad · R restart · F1 debug
+              </span>
+            )}
           </CardHeader>
           <CardContent>
-            <Playtest character={character} atlasUrl={atlasUrl} />
-            <p className="mt-2 text-xs text-muted-foreground">
-              Both fighters are {character ? 'your character' : 'the base fighter'}. Pink (P1) is
-              the one you control; blue (P2) stands as an idle dummy so you can watch your
-              fighter take hits — react, dizzy, faint — while you attack.
-              {character &&
-                !hasSprites &&
-                ' Renders as a silhouette until you generate sprites (step 2).'}
-            </p>
+            {rightTab === 'playtest' && (
+              <>
+                <Playtest character={character} atlasUrl={atlasUrl} />
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Both fighters are {character ? 'your character' : 'the base fighter'}. Pink (P1)
+                  is the one you control; blue (P2) stands as an idle dummy so you can watch your
+                  fighter take hits — react, dizzy, faint — while you attack.
+                  {character &&
+                    !hasSprites &&
+                    ' Renders as a silhouette until you generate sprites.'}
+                </p>
+              </>
+            )}
+
+            {rightTab === 'attributes' &&
+              (character ? (
+                <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)]">
+                  <div className="flex flex-col gap-2">
+                    <IdlePreview
+                      // Show the live draft when it matches the loaded fighter;
+                      // fall back to the committed character otherwise.
+                      character={
+                        previewCharacter?.meta.id === character.meta.id
+                          ? previewCharacter
+                          : character
+                      }
+                      atlasUrl={atlasUrl}
+                      color={P1_COLOR}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Live preview of your edits — it follows the form as you type, but only{' '}
+                      <span className="font-medium">Save changes</span> applies and saves them.
+                    </p>
+                  </div>
+                  <AttributesForm
+                    character={character}
+                    onApply={applyAttributes}
+                    onPreview={setPreviewCharacter}
+                    busy={busy}
+                  />
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Generate or load a character to edit its stats.
+                </p>
+              ))}
+
+            {rightTab === 'portraits' &&
+              (portraits ? (
+                <>
+                  <div className="grid grid-cols-3 gap-2">
+                    {(
+                      [
+                        ['Front', portraits.front],
+                        ['Back', portraits.back],
+                        ['Headshot', portraits.headshot],
+                      ] as const
+                    ).map(([label, url]) => (
+                      <a
+                        key={label}
+                        href={url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex flex-col items-center gap-1"
+                      >
+                        <img
+                          src={url}
+                          alt={label}
+                          className="aspect-[3/4] w-full rounded-md border border-input bg-white object-contain"
+                        />
+                        <span className="text-xs text-muted-foreground">{label}</span>
+                      </a>
+                    ))}
+                  </div>
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Generated from your reference. Front &amp; back skin the fighter; the headshot
+                    is used as this character's thumbnail.
+                  </p>
+                </>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  No portraits yet. Create a fighter “From a photo”, then generate portraits to get
+                  consistent front/back/headshot art.
+                </p>
+              ))}
           </CardContent>
         </Card>
       </div>

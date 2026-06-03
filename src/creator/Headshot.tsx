@@ -5,33 +5,42 @@ import type { Character } from '@/engine/schema.ts';
 const SIZE = 36;
 
 /**
- * Small character portrait, cropped client-side from the already-generated
- * sprite atlas — no extra image-gen call. We crop the top square of the `stand`
- * (idle) frame, which biases toward the head/torso for a "headshot" look.
+ * Small character portrait. Prefers the AI-generated headshot (a dedicated
+ * portrait the creator bakes from the reference photo); when none was saved we
+ * fall back to cropping the top square of the `stand` (idle) frame out of the
+ * sprite atlas — no extra image-gen call — and finally to the name's initial.
  *
- * The atlas URL is a presigned, CORS-clean S3 GET, so the canvas stays untainted.
- * Falls back to the character's initial while sprites are missing or loading.
+ * Both the headshot and atlas URLs are presigned, CORS-clean S3 GETs.
  */
 export function Headshot({
   character,
   atlasUrl,
+  headshotUrl,
   name,
 }: {
   character: Character;
   atlasUrl?: string;
+  /** Presigned URL of the generated headshot portrait, when one was saved. */
+  headshotUrl?: string;
   name: string;
 }): React.JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [drawn, setDrawn] = useState(false);
+  const [headshotOk, setHeadshotOk] = useState(true);
 
   const frames = character.spriteAtlas?.frames;
   // Prefer the idle pose; fall back to whatever frame exists first.
   const rect = frames ? (frames['stand'] ?? Object.values(frames)[0]) : undefined;
 
+  // Reset the img fallback flag whenever a new headshot URL arrives.
+  useEffect(() => setHeadshotOk(true), [headshotUrl]);
+  const showHeadshot = Boolean(headshotUrl) && headshotOk;
+
   useEffect(() => {
     setDrawn(false);
     const canvas = canvasRef.current;
-    if (!atlasUrl || !rect || !canvas) return;
+    // The generated headshot wins; only crop from the atlas as a fallback.
+    if (showHeadshot || !atlasUrl || !rect || !canvas) return;
 
     let cancelled = false;
     const img = new Image();
@@ -57,7 +66,7 @@ export function Headshot({
     return () => {
       cancelled = true;
     };
-  }, [atlasUrl, rect?.x, rect?.y, rect?.w, rect?.h]);
+  }, [showHeadshot, atlasUrl, rect?.x, rect?.y, rect?.w, rect?.h]);
 
   return (
     <div
@@ -65,7 +74,14 @@ export function Headshot({
       style={{ width: SIZE, height: SIZE }}
       aria-hidden
     >
-      {drawn ? (
+      {showHeadshot ? (
+        <img
+          src={headshotUrl}
+          alt=""
+          className="h-full w-full object-cover"
+          onError={() => setHeadshotOk(false)}
+        />
+      ) : drawn ? (
         <canvas ref={canvasRef} style={{ width: SIZE, height: SIZE }} />
       ) : (
         <>
