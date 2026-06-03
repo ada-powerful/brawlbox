@@ -11,11 +11,13 @@
 // id here. The registry shape is built for that — add templates and a selector.
 import type { Character } from '@/engine/schema.ts';
 import { KFM2_CHARACTER } from '@/sandbox/kfm2.ts';
+import { KFM2LITE_CHARACTER } from '@/sandbox/kfm2lite.ts';
 import kfm2TemplateRaw from '@/sandbox/kfm2-template.json' with { type: 'json' };
+import kfm2liteTemplateRaw from '@/sandbox/kfm2lite-template.json' with { type: 'json' };
 import type { GridTemplateSpec } from '@/creator/image/sliceGrid.ts';
 import type { RGB } from '@/creator/image/alpha.ts';
 
-interface Kfm2TemplateJson {
+interface TemplateJson {
   grid: { cols: number; rows: number };
   /** "col,row" -> engine sprite key. */
   cellMap: Record<string, string>;
@@ -37,9 +39,9 @@ export interface CharacterTemplate {
   bg: RGB;
 }
 
-/** Reverse kfm2-template.json's "col,row"→key map into key→{col,row}. */
-function kfm2GridSpec(): GridTemplateSpec {
-  const t = kfm2TemplateRaw as unknown as Kfm2TemplateJson;
+/** Reverse a template json's "col,row"→key map into key→{col,row}. */
+function gridSpec(raw: unknown): GridTemplateSpec {
+  const t = raw as TemplateJson;
   const cells: Record<string, { col: number; row: number }> = {};
   for (const [cr, key] of Object.entries(t.cellMap)) {
     const [col, row] = cr.split(',').map(Number);
@@ -55,7 +57,16 @@ export const TEMPLATES: CharacterTemplate[] = [
     hint: 'A close-range martial artist with 36 hand-tuned moves. Your description sets the look.',
     backendTemplateKey: 'templates/kfm2.png',
     base: KFM2_CHARACTER,
-    grid: kfm2GridSpec(),
+    grid: gridSpec(kfm2TemplateRaw),
+    bg: { r: 0, g: 255, b: 0 }, // chroma-green screen
+  },
+  {
+    id: 'kfm2lite',
+    label: 'Bajiquan Brawler (Lite)',
+    hint: 'A leaner 26-move brawler on a roomier sheet — cleaner art, sharper faces. Your description sets the look.',
+    backendTemplateKey: 'templates/kfm2lite.png',
+    base: KFM2LITE_CHARACTER,
+    grid: gridSpec(kfm2liteTemplateRaw),
     bg: { r: 0, g: 255, b: 0 }, // chroma-green screen
   },
 ];

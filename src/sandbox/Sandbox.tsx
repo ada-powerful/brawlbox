@@ -11,6 +11,7 @@ import { bakeFromSheet } from './bake.ts';
 import { HONDA_CHARACTER } from './honda.ts';
 import { KFM_TEMPLATE } from './kfmTemplate.ts';
 import { KFM2_CHARACTER, KFM2_ATLAS_URL } from './kfm2.ts';
+import { KFM2LITE_CHARACTER, KFM2LITE_ATLAS_URL } from './kfm2lite.ts';
 import kfmSheetUrl from './kfm-sheet.webp';
 import { hillsideStage } from '../stages/hillside/index.ts';
 import { CPU_LEVELS, type CpuLevel } from '../runtime/ai.ts';
@@ -51,13 +52,28 @@ const KFM2_FIGHTER: Fighter = {
   atlasUrl: KFM2_ATLAS_URL,
 };
 
+// Reduced 26-action KFM on the roomier re-padded sheet (kfm2lite). Same engine,
+// fewer/merged moves — the template counterpart for cleaner slicing + sharper
+// generated faces. Open the Action gallery to review the merged kicks.
+const KFM2LITE_FIGHTER: Fighter = {
+  id: 'kfm2lite',
+  label: 'KFM (lite 26-action sheet)',
+  character: KFM2LITE_CHARACTER,
+  atlasUrl: KFM2LITE_ATLAS_URL,
+};
+
 type Mode = 'match' | 'gallery';
 
 export function Sandbox() {
   const mountRef = useRef<HTMLDivElement>(null);
   const handleRef = useRef<GameHandle | null>(null);
   const galleryRef = useRef<GalleryHandle | null>(null);
-  const [fighters, setFighters] = useState<Fighter[]>([BASE_FIGHTER, HONDA_FIGHTER, KFM2_FIGHTER]);
+  const [fighters, setFighters] = useState<Fighter[]>([
+    BASE_FIGHTER,
+    HONDA_FIGHTER,
+    KFM2_FIGHTER,
+    KFM2LITE_FIGHTER,
+  ]);
   const [p1Id, setP1Id] = useState('base');
   const [p2Id, setP2Id] = useState('base');
   const [mode, setMode] = useState<Mode>('match');
