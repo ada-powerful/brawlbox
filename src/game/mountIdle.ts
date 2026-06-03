@@ -5,7 +5,7 @@
 // size/sprite tweaks are reflected before they're saved).
 import { Container, Graphics } from 'pixi.js';
 import type { Character } from '../engine/schema.ts';
-import { GROUND_Y_SCREEN, STAGE_WIDTH, type Player } from '../engine/world.ts';
+import { GROUND_Y_SCREEN, STAGE_HEIGHT, STAGE_WIDTH, type Player } from '../engine/world.ts';
 import { startApp } from '../render/app.ts';
 import { FighterRenderer } from '../render/fighter.ts';
 
@@ -63,22 +63,41 @@ export async function mountIdle(mount: HTMLElement, opts: IdleOptions): Promise<
   const app = await startApp(mount);
   const stage = app.stage;
 
+  // The match stage is 960×540 and a fighter is only ~110px tall, so at world
+  // size it looks tiny in the preview. Put the whole scene in a camera that
+  // zooms in on the fighter's feet, framing it large and centered.
+  const scene = new Container();
+  scene.pivot.set(STAGE_WIDTH / 2, GROUND_Y_SCREEN); // feet center on the ground
+  scene.x = STAGE_WIDTH / 2;
+  scene.y = STAGE_HEIGHT * 0.9; // ground sits near the bottom, body fills upward
+  stage.addChild(scene);
+
   const ground = new Graphics();
   ground.rect(0, GROUND_Y_SCREEN, STAGE_WIDTH, 2).fill({ color: 0x333842 });
-  stage.addChild(ground);
+  scene.addChild(ground);
 
   // Behind the fighter: a translucent outline of its collision size, so width /
   // height edits are visible even before sprites exist (procedural figures don't
   // scale with size on their own).
   const sizeBox = new Graphics();
-  stage.addChild(sizeBox);
+  scene.addChild(sizeBox);
 
   const fighterLayer = new Container();
-  stage.addChild(fighterLayer);
+  scene.addChild(fighterLayer);
 
   let current = opts.character;
   let renderer = new FighterRenderer(color, { character: current, textures });
   fighterLayer.addChild(renderer.view);
+
+  // Generous fixed zoom so a default-height fighter fills most of the frame;
+  // backed off only for unusually tall bodies so they never clip. Height edits
+  // stay visible (the on-screen size grows with height up to the cap), and width
+  // edits always scale.
+  const BASE_ZOOM = 3.2;
+  const applyZoom = (): void => {
+    const zoom = Math.min(BASE_ZOOM, (0.88 * STAGE_HEIGHT) / Math.max(1, current.size.height));
+    scene.scale.set(zoom);
+  };
 
   let held = 0;
   let raf = 0;
@@ -106,6 +125,7 @@ export async function mountIdle(mount: HTMLElement, opts: IdleOptions): Promise<
     raf = requestAnimationFrame(frame);
   };
 
+  applyZoom();
   drawSizeBox();
   draw();
   raf = requestAnimationFrame(frame);
@@ -120,6 +140,7 @@ export async function mountIdle(mount: HTMLElement, opts: IdleOptions): Promise<
       renderer.view.destroy();
       renderer = new FighterRenderer(color, { character: current, textures });
       fighterLayer.addChild(renderer.view);
+      applyZoom();
       drawSizeBox();
       draw();
     },
