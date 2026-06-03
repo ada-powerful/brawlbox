@@ -28,9 +28,11 @@ export class FighterRenderer {
   // Procedural fallback path.
   private readonly gfx?: Graphics;
 
-  // Uniform scale applied to sprite frames so a packed cell renders at the
-  // character's world height (cells are larger than world units). 1 = no scale.
-  private readonly spriteScale: number = 1;
+  // Per-axis scale applied to sprite frames. Y maps the packed cell to the
+  // character's world height; X is driven by size.width so a wider body renders
+  // wider (not just a wider hitbox). 1 = no scale (procedural path). See ctor.
+  private readonly spriteScaleX: number = 1;
+  private readonly spriteScaleY: number = 1;
 
   private lastAnim = '';
   private lastFrame = -1;
@@ -44,7 +46,12 @@ export class FighterRenderer {
       this.sprite.anchor.set(0.5, 1); // feet-center, matches world feet anchor
       // AI atlases are full-color art, so render them as-is (no player tint).
       const cellH = Object.values(opts.textures)[0]?.frame.height ?? opts.character.size.height;
-      this.spriteScale = opts.character.size.height / cellH;
+      // Y = cell → world height (overall size). X = width as girth: at the
+      // canonical creator body proportion (kfm2 60×110) X equals Y (undistorted);
+      // a wider/narrower size.width then stretches the sprite horizontally.
+      const NEUTRAL_BODY_RATIO = 60 / 110; // canonical width:height (kfm2 base)
+      this.spriteScaleY = opts.character.size.height / cellH;
+      this.spriteScaleX = opts.character.size.width / (cellH * NEUTRAL_BODY_RATIO);
       this.view = this.sprite;
     } else {
       this.gfx = new Graphics();
@@ -105,7 +112,7 @@ export class FighterRenderer {
     this.view.x = x;
     this.view.y = GROUND_Y_SCREEN - y;
     // Procedural shapes are authored at world size (scale 1); sprite cells are
-    // scaled to the character's height. Facing flips along x.
-    this.view.scale.set(curr.facing * this.spriteScale, this.spriteScale);
+    // scaled per-axis (height → Y, width → X). Facing flips along x.
+    this.view.scale.set(curr.facing * this.spriteScaleX, this.spriteScaleY);
   }
 }
