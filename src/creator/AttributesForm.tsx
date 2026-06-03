@@ -84,6 +84,8 @@ export function AttributesForm({
   busy?: boolean;
 }): React.JSX.Element {
   const [draft, setDraft] = useState<Draft>(() => toDraft(character));
+  // When on, editing Body width or height scales the other to keep the ratio.
+  const [lockAspect, setLockAspect] = useState(true);
 
   // Resync whenever a different (or regenerated) character flows in. During
   // editing the parent's `character` is stable, so this never clobbers typing;
@@ -92,6 +94,20 @@ export function AttributesForm({
 
   const set = (key: keyof Draft, value: string): void =>
     setDraft((d) => ({ ...d, [key]: value }));
+
+  // Edit width/height; when the ratio is locked, scale the partner field by the
+  // ratio just before this keystroke (so the ratio stays constant as you type).
+  const setDim = (key: 'width' | 'height', value: string): void =>
+    setDraft((d) => {
+      const next = { ...d, [key]: value };
+      const w = Number(d.width);
+      const h = Number(d.height);
+      const v = Number(value);
+      if (!lockAspect || !(w > 0) || !(h > 0) || !(v > 0)) return next;
+      if (key === 'width') next.height = String(Math.round((v * h) / w));
+      else next.width = String(Math.round((v * w) / h));
+      return next;
+    });
 
   // Validate every numeric field; collect the first offending label for a hint.
   const invalid = useMemo(() => {
@@ -178,7 +194,11 @@ export function AttributesForm({
                 type="number"
                 step={f.step ?? '1'}
                 value={draft[f.key]}
-                onChange={(e) => set(f.key, e.target.value)}
+                onChange={(e) =>
+                  f.key === 'width' || f.key === 'height'
+                    ? setDim(f.key, e.target.value)
+                    : set(f.key, e.target.value)
+                }
                 disabled={busy}
                 className={bad ? 'border-destructive' : undefined}
               />
@@ -186,6 +206,17 @@ export function AttributesForm({
           );
         })}
       </div>
+
+      <label className="flex items-center gap-2 text-xs text-muted-foreground">
+        <input
+          type="checkbox"
+          checked={lockAspect}
+          disabled={busy}
+          onChange={(e) => setLockAspect(e.target.checked)}
+          className="h-3.5 w-3.5 accent-primary"
+        />
+        Lock body width : height ratio (scale both together)
+      </label>
 
       <div className="flex items-center gap-3">
         <Button onClick={save} disabled={busy || !dirty || Boolean(invalid)}>
