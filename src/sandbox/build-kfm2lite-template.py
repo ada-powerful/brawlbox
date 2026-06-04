@@ -54,13 +54,23 @@ CUT = {
     "punch2h", "uppercut", "hk", "crouchhk", "dashkick", "launch",
 }
 
-# Rows whose keyframes are halved (keep every other frame): the base actions are
-# readable with half the poses, which gives NB2 fewer, bigger cells to draw.
-# kfm2lite.ts doubles each kept frame's on-screen duration so the action still
-# spans the same number of ticks (same feel, fewer drawn poses). The two attack
-# rows keep their strike: at active-frame 3 the kept even frame 4 is still fully
-# extended (kfm2lite.ts re-points the hitbox to the new index 2).
-HALVE = {"idle", "walk", "walkkick", "punchcharge", "throw", "intro"}
+# Per-row keyframe reduction: keep every Nth frame (4 = quartered, 2 = halved).
+# Fewer, bigger cells for NB2 to draw; kfm2lite.ts retimes the survivors so each
+# action keeps its on-screen length. The two attack rows (walkkick, punchcharge)
+# keep their strike — at active-frame 3 the kept even frame 4 is still fully
+# extended, and kfm2lite.ts re-points the hitbox to the new index 2.
+HALVE_FACTOR = {
+    "idle": 4, "walk": 4,                                     # quartered
+    "walkkick": 2, "punchcharge": 2, "throw": 2, "intro": 2,  # halved
+    "jump": 2, "crouch": 2,                                   # halved
+    "guardstand": 2, "guardcrouch": 2,                        # halved
+}
+# Rows that drop trailing frames (name -> count), their leading frame, or
+# specific frames (by index, after the [::factor] subsample). kfm2lite.ts retimes
+# the survivors so each action keeps its length.
+TRIM_LAST = {"jumphk": 1, "win": 1, "dash": 2}
+TRIM_FIRST = {"intro"}
+DROP_INDICES = {"jump": (2, 3)}
 
 # Layout knobs. Fewer columns => bigger pose in the 4K template. Pad factors set
 # the green margin around the widest/tallest kept pose.
@@ -85,8 +95,17 @@ def main() -> None:
         if name in CUT:
             continue
         live = [k for k in keys if k in src_frames]
-        if name in HALVE:
-            live = live[::2]  # keep frames 0,2,4,... (ceil(n/2) poses)
+        factor = HALVE_FACTOR.get(name)
+        if factor:
+            live = live[::factor]  # keep every Nth pose
+        drop = DROP_INDICES.get(name)
+        if drop:
+            live = [k for i, k in enumerate(live) if i not in drop]
+        if name in TRIM_FIRST and len(live) > 1:
+            live = live[1:]  # drop the leading frame
+        n = TRIM_LAST.get(name, 0)
+        if n and len(live) > n:
+            live = live[:-n]  # drop the trailing frame(s)
         kept_anims[name] = live
         ordered.extend(live)
 

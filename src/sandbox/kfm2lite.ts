@@ -28,11 +28,36 @@ const data = kfm2liteData as unknown as {
 
 // Looping/ambient actions; everything else plays once.
 const LOOPING = new Set(['stand', 'walk']);
-// Base-action rows whose keyframes were halved on the sheet (see
-// build-kfm2lite-template.py `HALVE`). We double each kept frame's duration so
-// the action still spans the same number of ticks — fewer drawn poses, same
-// feel. Keyed by the data.json anim name (pre-'idle'→'stand' rename).
-const HALVED = new Set(['idle', 'walk', 'walkkick', 'punchcharge', 'throw', 'intro']);
+// Reduced rows (see build-kfm2lite-template.py): after the sheet drops
+// keyframes, the survivors are retimed to this many ticks so each action keeps
+// the on-screen length it had at full frame count. Keyed by the data.json anim
+// name (pre-'idle'→'stand' rename); 'throw' is retimed before it is split below.
+const KEEP_TICKS: Record<string, number> = {
+  idle: 42, // 7 × 6 (looping breath)
+  walk: 96, // 16 × 6
+  jump: 36, // 9 × 4
+  dash: 24, // 6 × 4 (two trailing frames trimmed on the sheet)
+  crouch: 16, // 4 × 4
+  walkkick: 32, // 8 × 4
+  punchcharge: 32, // 8 × 4
+  throw: 52, // 13 × 4
+  intro: 28, // 7 × 4
+  guardstand: 12, // 3 × 4
+  guardcrouch: 12, // 3 × 4
+  jumphk: 12, // 3 × 4 (trailing recovery frame trimmed on the sheet)
+  win: 12, // 3 × 4 (trailing frame trimmed on the sheet)
+};
+
+// Spread `total` ticks across `frames` as evenly as possible (leading frames
+// absorb the remainder), preserving every other field. Keeps an action's length
+// constant after its keyframe count is reduced.
+function retime(frames: Animation['frames'], total: number): Animation['frames'] {
+  const n = frames.length;
+  if (n === 0) return frames;
+  const base = Math.floor(total / n);
+  const extra = total - base * n;
+  return frames.map((f, i) => ({ ...f, duration: base + (i < extra ? 1 : 0) }));
+}
 // Generic body hurtbox (combat-accurate boxes are a later pass).
 const HURT = [{ x: -30, y: 0, w: 60, h: 100 }];
 const HURT_LOW = [{ x: -28, y: 0, w: 56, h: 60 }];
@@ -63,12 +88,11 @@ function buildAnimations(): Record<string, Animation> {
     // there); the idle row takes that name so the fighter renders at rest.
     const name = name0 === 'idle' ? 'stand' : name0;
     const atk = ATTACKS[name];
-    const halveMul = HALVED.has(name0) ? 2 : 1; // doubled tick budget per kept frame
     out[name] = {
       loop: LOOPING.has(name),
       frames: keys.map((sprite, i) => ({
         sprite,
-        duration: (LOOPING.has(name) ? 6 : 4) * halveMul,
+        duration: LOOPING.has(name) ? 6 : 4,
         offset: { x: 0, y: 0 },
         hurtboxes: atk?.low ? HURT_LOW : HURT,
         hitboxes:
@@ -77,6 +101,9 @@ function buildAnimations(): Record<string, Animation> {
             : [],
       })),
     };
+    // Reduced rows: retime the survivors to the original on-screen length.
+    const keep = KEEP_TICKS[name0];
+    if (keep) out[name]!.frames = retime(out[name]!.frames, keep);
   }
   // Split the throw row into its grab (lift) and toss phases. The row is halved
   // now, so split proportionally (grab was ~5/13 of the full row) instead of at
@@ -97,15 +124,32 @@ function buildAnimations(): Record<string, Animation> {
   const hit = out['hit'];
   const hitair = out['hitair'];
   if (hit) {
-    out['hitfall'] = { loop: false, frames: hit.frames.slice(5) };
-    out['tossed'] = { loop: false, frames: hit.frames.slice(5) };
+    // Air/launched reaction (hit.air) and thrown-victim landing (tossed) both
+    // keep only the launch pose + the descent — dropping the early tumble poses
+    // (fall frames 2-4) — retimed to the original 24-tick length.
+    const fall = hit.frames.slice(5);
+    const descent = retime(
+      fall.filter((_, i) => i === 0 || i >= 4),
+      24,
+    );
+    out['hitfall'] = { loop: false, frames: descent };
+    out['tossed'] = { loop: false, frames: descent };
   }
   if (hitair) {
-    out['hitstand'] = { loop: false, frames: hitair.frames.slice(0, 5) };
+    // Standing flinch: the first two of the upright run's poses (frames 0 & 2),
+    // retimed into the 12-tick hit.stand window.
+    out['hitstand'] = {
+      loop: false,
+      frames: retime(
+        hitair.frames.slice(0, 5).filter((_, i) => i === 0 || i === 2),
+        12,
+      ),
+    };
     out['kdlie'] = { loop: false, frames: [hitair.frames[5]!] };
-    out['getup'] = { loop: false, frames: hitair.frames.slice(6, 10) };
-    // Dizzy/stun: loop the standing recoil so the fighter wobbles in place.
-    out['dizzy'] = { loop: true, frames: hitair.frames.slice(2, 5) };
+    // Get-up: drop the final near-standing frame (4 → 3), keep the 16-tick length.
+    out['getup'] = { loop: false, frames: retime(hitair.frames.slice(6, 9), 16) };
+    // Dizzy/stun: loop the standing recoil (2 frames) so the fighter wobbles.
+    out['dizzy'] = { loop: true, frames: retime(hitair.frames.slice(2, 4), 12) };
   }
   // The raw 'hit'/'hitair' rows are internal sources only — every state plays
   // one of the derived slices above — so drop them from the animation set. That
