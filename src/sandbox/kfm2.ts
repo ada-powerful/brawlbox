@@ -25,28 +25,30 @@ const LOOPING = new Set(['stand', 'walk', 'run']);
 const HURT = [{ x: -30, y: 0, w: 60, h: 100 }];
 const HURT_LOW = [{ x: -28, y: 0, w: 56, h: 60 }];
 
-// Attack anims get a hitbox on their active frame so the moves connect. (Active
-// frame / box geometry are first-pass; stage 2 tunes per move.)
+// Attack anims get a hitbox on their active frame so the moves connect. Box reach
+// (x+w) is the authored attack range (MUGEN-style Clsn1), tuned to body-contact
+// spacing (bodies meet ~44px apart; body half-width ~22), NOT derived from the
+// sprite silhouette — so even short pokes connect. Heavies/specials reach further.
 type AtkCfg = { active: number; box: [number, number, number, number]; low?: boolean };
 const ATTACKS: Record<string, AtkCfg> = {
-  punch: { active: 1, box: [30, 55, 55, 28] },
-  lk: { active: 1, box: [30, 38, 55, 28] },
-  hk: { active: 2, box: [30, 45, 72, 38] },
-  crouchpunch: { active: 1, box: [28, 22, 48, 24], low: true },
-  crouchlk: { active: 1, box: [30, 8, 55, 22], low: true },
-  crouchhk: { active: 2, box: [30, 8, 70, 26], low: true },
-  jumppunch: { active: 1, box: [25, 38, 56, 34] },
-  jumplk: { active: 0, box: [22, 14, 70, 56] }, // generous reach — jump-in kicks should connect easily
-  jumphk: { active: 1, box: [25, 30, 64, 40] },
-  // Two-button (LP+HP) specials — generous reach so they out-range the throw.
-  punch2h: { active: 2, box: [28, 46, 104, 48] },
-  hook: { active: 2, box: [30, 48, 100, 40] },
-  uppercut: { active: 3, box: [22, 50, 56, 78] }, // tall — anti-air launcher
-  crouchhook: { active: 2, box: [28, 16, 64, 32], low: true },
-  // Charged punch (hold the punch button) + walking / dashing kicks.
-  punchcharge: { active: 3, box: [30, 48, 86, 46] },
-  walkkick: { active: 3, box: [30, 38, 74, 34] },
-  dashkick: { active: 3, box: [32, 40, 92, 36] }, // long forward reach
+  punch: { active: 1, box: [30, 55, 18, 28] }, // reach 48
+  lk: { active: 1, box: [30, 38, 18, 28] }, // reach 48
+  hk: { active: 2, box: [30, 45, 28, 38] }, // reach 58
+  crouchpunch: { active: 1, box: [28, 22, 18, 24], low: true }, // reach 46
+  crouchlk: { active: 1, box: [30, 8, 16, 22], low: true }, // reach 46
+  crouchhk: { active: 2, box: [30, 8, 26, 26], low: true }, // reach 56
+  jumppunch: { active: 1, box: [25, 38, 25, 34] }, // reach 50
+  jumplk: { active: 0, box: [22, 14, 32, 56] }, // reach 54 — generous jump-in
+  jumphk: { active: 1, box: [25, 30, 27, 40] }, // reach 52
+  // Two-button (LP+HP) specials — longer reach so they out-range the throw.
+  punch2h: { active: 2, box: [28, 46, 42, 48] }, // reach 70
+  hook: { active: 2, box: [30, 48, 34, 40] }, // reach 64
+  uppercut: { active: 3, box: [22, 50, 28, 78] }, // reach 50, tall — anti-air launcher
+  crouchhook: { active: 2, box: [28, 16, 28, 32], low: true }, // reach 56
+  // Charged punch (held) lunges; walking / dashing kicks.
+  punchcharge: { active: 3, box: [30, 48, 44, 46] }, // reach 74
+  walkkick: { active: 3, box: [30, 38, 30, 34] }, // reach 60
+  dashkick: { active: 3, box: [32, 40, 40, 36] }, // reach 72 — long forward lunge
 };
 
 function buildAnimations(): Record<string, Animation> {

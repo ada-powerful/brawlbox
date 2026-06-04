@@ -67,17 +67,19 @@ const HURT_LOW = [{ x: -28, y: 0, w: 56, h: 60 }];
 // reuse the same active-frame geometry — only their HitDef damage/recovery differ.
 type AtkCfg = { active: number; box: [number, number, number, number]; low?: boolean };
 const ATTACKS: Record<string, AtkCfg> = {
-  punch: { active: 1, box: [30, 55, 55, 28] },
-  lk: { active: 1, box: [30, 38, 55, 28] }, // also used by the heavy kick (hk state)
-  crouchpunch: { active: 1, box: [28, 22, 48, 24], low: true },
-  crouchlk: { active: 1, box: [30, 8, 55, 22], low: true }, // also the crouch heavy (crouchhk)
-  jumppunch: { active: 1, box: [25, 38, 56, 34] },
-  jumphk: { active: 1, box: [25, 30, 64, 40] }, // also used by jumplk state
-  // Charged punch (hold the punch button) + walking / dashing kicks. These two
-  // rows are halved (keep frames 0,2,4,6): the old strike at frame 3 is dropped,
-  // but the kept frame 4 (new index 2) is still fully extended — so active=2.
-  punchcharge: { active: 2, box: [30, 48, 86, 46] },
-  walkkick: { active: 2, box: [30, 38, 74, 34] }, // also used by the dash kicks
+  // Box reach (x+w) is the authored attack range (MUGEN-style Clsn1), tuned to
+  // the body-contact spacing (bodies meet ~44px apart; body half-width ~22), NOT
+  // derived from the sprite silhouette — so even short pokes connect reliably.
+  punch: { active: 1, box: [30, 55, 18, 28] }, // reach 48
+  lk: { active: 1, box: [30, 38, 18, 28] }, // reach 48; also the heavy kick (hk state)
+  crouchpunch: { active: 1, box: [28, 22, 18, 24], low: true }, // reach 46
+  crouchlk: { active: 1, box: [30, 8, 16, 22], low: true }, // reach 46; also crouchhk
+  jumppunch: { active: 1, box: [25, 38, 25, 34] }, // reach 50
+  jumphk: { active: 1, box: [25, 30, 27, 40] }, // reach 52; also jumplk state
+  // Charged punch (held) lunges further; walking/dashing kicks share walkkick.
+  // (These rows are halved — strike kept on index 2.)
+  punchcharge: { active: 2, box: [30, 48, 44, 46] }, // reach 74
+  walkkick: { active: 2, box: [30, 38, 30, 34] }, // reach 60; also the dash kicks
 };
 
 function buildAnimations(): Record<string, Animation> {

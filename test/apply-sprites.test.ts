@@ -60,13 +60,9 @@ describe('applySpritesToCharacter', () => {
     ]);
   });
 
-  test('caps attack hitbox reach at the silhouette, keeping its vertical zone', () => {
+  test('leaves attack hitboxes untouched (authored Clsn1 reach, not silhouette)', () => {
     const out = applySpritesToCharacter(character(), 'atlas.png', frames, hurtboxes);
-    const ub = out.animations!.punch!.frames[0]!.hurtboxes[0]!; // world silhouette
-    const hb = out.animations!.punch!.frames[0]!.hitboxes[0]!;
-    expect(hb.x + hb.w).toBeCloseTo(ub.x + ub.w, 5); // reach == limb tip (silhouette fwd)
-    expect(hb.y).toBe(2); // authored vertical zone (high/low) preserved
-    expect(hb.h).toBe(4);
+    expect(out.animations!.punch!.frames[0]!.hitboxes).toEqual([{ x: 1, y: 2, w: 3, h: 4 }]);
   });
 
   test('does not mutate the input character', () => {
