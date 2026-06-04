@@ -42,13 +42,22 @@ const hurtboxes: Record<string, AABB> = {
 };
 
 describe('applySpritesToCharacter', () => {
-  test('attaches the atlas and overwrites body hurtboxes from the derived boxes', () => {
+  test('overwrites hurtboxes with the alpha box scaled to world units', () => {
     const out = applySpritesToCharacter(character(), 'atlas.png', frames, hurtboxes);
     expect(out.spriteAtlas).toEqual({ url: 'atlas.png', frames });
-    expect(out.animations!.stand!.frames[0]!.hurtboxes).toEqual([hurtboxes.stand]);
-    expect(out.animations!.punch!.frames[0]!.hurtboxes).toEqual([hurtboxes['punch-active']]);
-    // reused sprite key gets its derived box too
-    expect(out.animations!.punch!.frames[1]!.hurtboxes).toEqual([hurtboxes.stand]);
+    // cellH 160 → renderer scale: Y = 100/160 = 0.625, X = 60/(160·60/110) = 0.6875.
+    // The raw cell-pixel boxes are scaled by those factors so collision matches
+    // the rendered body instead of the (2× larger) packed cell.
+    expect(out.animations!.stand!.frames[0]!.hurtboxes).toEqual([
+      { x: -20.625, y: 0, w: 41.25, h: 93.75 },
+    ]);
+    expect(out.animations!.punch!.frames[0]!.hurtboxes).toEqual([
+      { x: -13.75, y: 0, w: 61.875, h: 87.5 },
+    ]);
+    // reused sprite key gets the same scaled box
+    expect(out.animations!.punch!.frames[1]!.hurtboxes).toEqual([
+      { x: -20.625, y: 0, w: 41.25, h: 93.75 },
+    ]);
   });
 
   test('leaves attack hitboxes untouched', () => {

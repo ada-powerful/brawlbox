@@ -32,11 +32,22 @@ export function gridLayout(
   return { frames, width: columns * cellW, height: rows * cellH, cols: columns, rows };
 }
 
+// Canonical body width:height (kfm2 60×110). MUST match render/fighter.ts so the
+// collision hurtbox lands exactly on the rendered sprite.
+const NEUTRAL_BODY_RATIO = 60 / 110;
+
 /**
  * Return a copy of `character` wired to a generated atlas: sets spriteAtlas and
  * overwrites each animation frame's body hurtbox with the alpha-derived box.
  * Attack hitboxes (LLM-authored) are left untouched. `atlasUrl` is the logical
  * reference stored in the JSON; the runtime resolves it to a real URL.
+ *
+ * The alpha hurtboxes come in CELL-pixel units (the packed 240px cell), but the
+ * renderer scales each cell down to the character's world size — so collision
+ * must use the SAME scale or it tests a body ~2× too big (hits land out at the
+ * padded frame edge instead of body-to-body). We apply the renderer's exact
+ * per-axis factors (Y = size.height/cellH; X = size.width / (cellH·ratio)) so the
+ * hurtbox tracks the visible silhouette.
  */
 export function applySpritesToCharacter(
   character: Character,
@@ -46,10 +57,19 @@ export function applySpritesToCharacter(
 ): Character {
   const next = structuredClone(character);
   next.spriteAtlas = { url: atlasUrl, frames };
+  const cellH = Object.values(frames)[0]?.h ?? character.size.height;
+  const scaleY = character.size.height / cellH;
+  const scaleX = character.size.width / (cellH * NEUTRAL_BODY_RATIO);
+  const toWorld = (b: AABB): AABB => ({
+    x: b.x * scaleX,
+    y: b.y * scaleY,
+    w: b.w * scaleX,
+    h: b.h * scaleY,
+  });
   for (const anim of Object.values(next.animations ?? {})) {
     for (const frame of anim.frames) {
       const hb = hurtboxes[frame.sprite];
-      if (hb) frame.hurtboxes = [hb];
+      if (hb) frame.hurtboxes = [toWorld(hb)];
     }
   }
   return next;
