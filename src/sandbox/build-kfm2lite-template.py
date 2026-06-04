@@ -46,11 +46,21 @@ OUT_TPL_PNG = os.path.join(HERE, "kfm2lite-template-4k.png")
 OUT_TPL_JSON = os.path.join(HERE, "kfm2lite-template.json")
 
 # Anim rows removed from the lite sheet (cut outright, or merged onto another
-# row's art by kfm2lite.ts so their own frames are unused).
+# row's art by kfm2lite.ts so their own frames are unused). `launch` is dropped
+# too: the launched/air reaction reuses the 'hit' row (see kfm2lite.ts), so a
+# separate launch row is redundant.
 CUT = {
     "run", "spin", "jumplk", "crouchhook", "hook",
-    "punch2h", "uppercut", "hk", "crouchhk", "dashkick",
+    "punch2h", "uppercut", "hk", "crouchhk", "dashkick", "launch",
 }
+
+# Rows whose keyframes are halved (keep every other frame): the base actions are
+# readable with half the poses, which gives NB2 fewer, bigger cells to draw.
+# kfm2lite.ts doubles each kept frame's on-screen duration so the action still
+# spans the same number of ticks (same feel, fewer drawn poses). The two attack
+# rows keep their strike: at active-frame 3 the kept even frame 4 is still fully
+# extended (kfm2lite.ts re-points the hitbox to the new index 2).
+HALVE = {"idle", "walk", "walkkick", "punchcharge", "throw", "intro"}
 
 # Layout knobs. Fewer columns => bigger pose in the 4K template. Pad factors set
 # the green margin around the widest/tallest kept pose.
@@ -75,6 +85,8 @@ def main() -> None:
         if name in CUT:
             continue
         live = [k for k in keys if k in src_frames]
+        if name in HALVE:
+            live = live[::2]  # keep frames 0,2,4,... (ceil(n/2) poses)
         kept_anims[name] = live
         ordered.extend(live)
 

@@ -28,6 +28,11 @@ const data = kfm2liteData as unknown as {
 
 // Looping/ambient actions; everything else plays once.
 const LOOPING = new Set(['stand', 'walk']);
+// Base-action rows whose keyframes were halved on the sheet (see
+// build-kfm2lite-template.py `HALVE`). We double each kept frame's duration so
+// the action still spans the same number of ticks — fewer drawn poses, same
+// feel. Keyed by the data.json anim name (pre-'idle'→'stand' rename).
+const HALVED = new Set(['idle', 'walk', 'walkkick', 'punchcharge', 'throw', 'intro']);
 // Generic body hurtbox (combat-accurate boxes are a later pass).
 const HURT = [{ x: -30, y: 0, w: 60, h: 100 }];
 const HURT_LOW = [{ x: -28, y: 0, w: 56, h: 60 }];
@@ -43,9 +48,11 @@ const ATTACKS: Record<string, AtkCfg> = {
   crouchlk: { active: 1, box: [30, 8, 55, 22], low: true }, // also the crouch heavy (crouchhk)
   jumppunch: { active: 1, box: [25, 38, 56, 34] },
   jumphk: { active: 1, box: [25, 30, 64, 40] }, // also used by jumplk state
-  // Charged punch (hold the punch button) + walking / dashing kicks.
-  punchcharge: { active: 3, box: [30, 48, 86, 46] },
-  walkkick: { active: 3, box: [30, 38, 74, 34] }, // also used by the dash kicks
+  // Charged punch (hold the punch button) + walking / dashing kicks. These two
+  // rows are halved (keep frames 0,2,4,6): the old strike at frame 3 is dropped,
+  // but the kept frame 4 (new index 2) is still fully extended — so active=2.
+  punchcharge: { active: 2, box: [30, 48, 86, 46] },
+  walkkick: { active: 2, box: [30, 38, 74, 34] }, // also used by the dash kicks
 };
 
 function buildAnimations(): Record<string, Animation> {
@@ -56,11 +63,12 @@ function buildAnimations(): Record<string, Animation> {
     // there); the idle row takes that name so the fighter renders at rest.
     const name = name0 === 'idle' ? 'stand' : name0;
     const atk = ATTACKS[name];
+    const halveMul = HALVED.has(name0) ? 2 : 1; // doubled tick budget per kept frame
     out[name] = {
       loop: LOOPING.has(name),
       frames: keys.map((sprite, i) => ({
         sprite,
-        duration: LOOPING.has(name) ? 6 : 4,
+        duration: (LOOPING.has(name) ? 6 : 4) * halveMul,
         offset: { x: 0, y: 0 },
         hurtboxes: atk?.low ? HURT_LOW : HURT,
         hitboxes:
@@ -70,23 +78,41 @@ function buildAnimations(): Record<string, Animation> {
       })),
     };
   }
-  // Split the throw row into its grab (frames 0-4) and toss (5+) phases.
+  // Split the throw row into its grab (lift) and toss phases. The row is halved
+  // now, so split proportionally (grab was ~5/13 of the full row) instead of at
+  // a fixed index.
   const throwAnim = out['throw'];
   if (throwAnim) {
-    out['throwgrab'] = { loop: false, frames: throwAnim.frames.slice(0, 5) };
-    out['throwtoss'] = { loop: false, frames: throwAnim.frames.slice(5) };
+    const grab = Math.max(1, Math.round((throwAnim.frames.length * 5) / 13));
+    out['throwgrab'] = { loop: false, frames: throwAnim.frames.slice(0, grab) };
+    out['throwtoss'] = { loop: false, frames: throwAnim.frames.slice(grab) };
   }
-  // Launched-victim reaction frames, carved from the hit rows (see kfm2.ts).
+  // Reaction frames carved from the two hit rows. The 'hit' row falls to the
+  // ground (frames 5+): that slice is the air/launched reaction (hitfall, used
+  // by hit.air — no separate launch row anymore) and a thrown victim's landing
+  // (tossed). The standing flinch's early frames are dropped so an airborne
+  // victim never looks like it's standing. The 'hitair' row stays upright
+  // through frame 4, so its first 5 frames are the standing flinch (hit.stand);
+  // its tail is the knockdown lie + get-up.
   const hit = out['hit'];
   const hitair = out['hitair'];
-  if (hit) out['tossed'] = { loop: false, frames: hit.frames.slice(5) };
+  if (hit) {
+    out['hitfall'] = { loop: false, frames: hit.frames.slice(5) };
+    out['tossed'] = { loop: false, frames: hit.frames.slice(5) };
+  }
   if (hitair) {
+    out['hitstand'] = { loop: false, frames: hitair.frames.slice(0, 5) };
     out['kdlie'] = { loop: false, frames: [hitair.frames[5]!] };
     out['getup'] = { loop: false, frames: hitair.frames.slice(6, 10) };
+    // Dizzy/stun: loop the standing recoil so the fighter wobbles in place.
+    out['dizzy'] = { loop: true, frames: hitair.frames.slice(2, 5) };
   }
-  // Dizzy/stun = the stagger after a launch; looped so the fighter wobbles.
-  const launch = out['launch'];
-  if (launch) out['dizzy'] = { loop: true, frames: launch.frames.slice(8) };
+  // The raw 'hit'/'hitair' rows are internal sources only — every state plays
+  // one of the derived slices above — so drop them from the animation set. That
+  // keeps them out of the Controls/gallery listing (which surfaces any anim not
+  // bound to a state); their sprite rects stay in the atlas for the slices.
+  delete out['hit'];
+  delete out['hitair'];
   return out;
 }
 
@@ -121,7 +147,10 @@ function hd(over: T = {}): T {
 }
 
 function buildStates(anims: Record<string, Animation>): Record<string, unknown> {
-  const dur = (id: string): number => (anims[id]?.frames.length ?? 1) * 4; // anim length in ticks
+  // Anim length in ticks. Sums real per-frame durations (halved rows carry
+  // doubled durations), so state timing is unchanged by the keyframe halving.
+  const dur = (id: string): number =>
+    (anims[id]?.frames ?? []).reduce((t, f) => t + (f.duration ?? 4), 0) || 4;
   // An attack state: HitDef on the active frame, then return to `back`.
   const atk = (anim: string, active: number, back: string, opts: T = {}): T => {
     const s: T = {
@@ -308,7 +337,7 @@ function buildStates(anims: Record<string, Animation>): Record<string, unknown> 
       },
       dur('punch') + 8,
     ),
-    punchcharge: atk('punchcharge', 3, 'stand', {
+    punchcharge: atk('punchcharge', 2, 'stand', {
       hd: {
         damage: { hit: 110, guard: 14 },
         groundVelocity: { x: 7, y: 2 },
@@ -323,21 +352,21 @@ function buildStates(anims: Record<string, Animation>): Record<string, unknown> 
       ret: dur('lk') + 6,
     }),
     // Walking kicks and dashing kicks all share the 'walkkick' art; differ in power.
-    walkkick: atk('walkkick', 3, 'stand', {
+    walkkick: atk('walkkick', 2, 'stand', {
       hd: { damage: { hit: 42, guard: 6 }, groundVelocity: { x: 5, y: 0 } },
     }),
-    walkkickHeavy: atk('walkkick', 3, 'stand', {
+    walkkickHeavy: atk('walkkick', 2, 'stand', {
       hd: { damage: { hit: 70, guard: 10 }, groundVelocity: { x: 6, y: 0 } },
       ret: dur('walkkick') + 6,
     }),
-    dashkick: atk('walkkick', 3, 'stand', {
+    dashkick: atk('walkkick', 2, 'stand', {
       hd: {
         damage: { hit: 55, guard: 8 },
         groundVelocity: { x: 7, y: 1 },
         pauseTime: { p1: 12, p2: 12 },
       },
     }),
-    dashkickHeavy: atk('walkkick', 3, 'stand', {
+    dashkickHeavy: atk('walkkick', 2, 'stand', {
       hd: { damage: { hit: 85, guard: 12 }, groundVelocity: { x: 8, y: 2 } },
       ret: dur('walkkick') + 6,
     }),
@@ -474,19 +503,21 @@ function buildStates(anims: Record<string, Animation>): Record<string, unknown> 
       velSet: { x: 0 },
       controllers: [],
     },
+    // Standing hit: the upright flinch (hitair row's first 5 frames).
     'hit.stand': {
       type: 'S',
       moveType: 'H',
       physics: 'S',
-      anim: 'hit',
+      anim: 'hitstand',
       ctrl: 0,
       controllers: [{ type: 'ChangeState', value: 'stand', ctrl: 1, trigger: ge('time', 12) }],
     },
+    // Air/launched hit: the falling slice of the hit row, then knockdown on land.
     'hit.air': {
       type: 'A',
       moveType: 'H',
       physics: 'A',
-      anim: 'hitair',
+      anim: 'hitfall',
       ctrl: 0,
       controllers: [{ type: 'ChangeState', value: 'knockdown', trigger: landed() }],
     },
