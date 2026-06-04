@@ -35,6 +35,9 @@ export function gridLayout(
 // Canonical body width:height (kfm2 60×110). MUST match render/fighter.ts so the
 // collision hurtbox lands exactly on the rendered sprite.
 const NEUTRAL_BODY_RATIO = 60 / 110;
+// Smallest forward extent a clamped attack hitbox keeps, so a short pose still
+// connects rather than collapsing to zero width.
+const MIN_HITBOX_W = 8;
 
 /**
  * Return a copy of `character` wired to a generated atlas: sets spriteAtlas and
@@ -69,7 +72,19 @@ export function applySpritesToCharacter(
   for (const anim of Object.values(next.animations ?? {})) {
     for (const frame of anim.frames) {
       const hb = hurtboxes[frame.sprite];
-      if (hb) frame.hurtboxes = [toWorld(hb)];
+      if (!hb) continue;
+      const wh = toWorld(hb);
+      frame.hurtboxes = [wh];
+      if (frame.hitboxes.length === 0) continue;
+      // Cap each attack's forward reach at the limb — the silhouette's forward
+      // edge for this frame — so hits land when the visible limb meets the body,
+      // not out at the hand-authored (padded-cell-era) reach. Keep the authored
+      // vertical zone (high/low) and a minimum width so the move still connects.
+      const fwd = wh.x + wh.w;
+      frame.hitboxes = frame.hitboxes.map((box) => {
+        const x = Math.max(0, Math.min(box.x, fwd - MIN_HITBOX_W));
+        return { ...box, x, w: Math.max(MIN_HITBOX_W, fwd - x) };
+      });
     }
   }
   return next;

@@ -103,13 +103,16 @@ function pushPair(a: Player, b: Player, characters: Record<string, Character>): 
   const cb = characters[b.characterId];
   if (!ca || !cb) return;
 
-  const aMinX = a.pos.x - ca.size.width / 2;
-  const aMaxX = a.pos.x + ca.size.width / 2;
+  // Push uses the body silhouette half-width (p.halfWidth, kept in sync by tick)
+  // so fighters close to body contact — matching throw range and p2BodyDist,
+  // which already use halfWidth — instead of the wider padded sprite cell.
+  const aMinX = a.pos.x - a.halfWidth;
+  const aMaxX = a.pos.x + a.halfWidth;
   const aMinY = a.pos.y;
   const aMaxY = a.pos.y + ca.size.height;
 
-  const bMinX = b.pos.x - cb.size.width / 2;
-  const bMaxX = b.pos.x + cb.size.width / 2;
+  const bMinX = b.pos.x - b.halfWidth;
+  const bMaxX = b.pos.x + b.halfWidth;
   const bMinY = b.pos.y;
   const bMaxY = b.pos.y + cb.size.height;
 

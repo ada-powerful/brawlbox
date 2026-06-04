@@ -7,6 +7,7 @@ import { applyStateHeader, stepStateMachine } from './stateMachine.ts';
 import { applyBinds, applyThrows, detectThrows } from './throw.ts';
 import type { Inputs, Player, World } from './world.ts';
 import {
+  bodyHalfWidth,
   isDowned,
   KO_DELAY,
   STAGE_CEILING,
@@ -16,6 +17,14 @@ import {
 } from './world.ts';
 
 export function tick(world: World, characters: Record<string, Character>, inputs: Inputs): World {
+  // Keep each fighter's body half-width in sync with its rendered silhouette, so
+  // spacing/throw/push are body-accurate (not the padded sprite cell). Constant
+  // per character, so this is idempotent.
+  for (const p of world.players) {
+    const c = characters[p.characterId];
+    if (c) p.halfWidth = bodyHalfWidth(c);
+  }
+
   if (world.matchOver) {
     return tickMatchOver(world, characters, inputs);
   }

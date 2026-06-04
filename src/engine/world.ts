@@ -1,4 +1,4 @@
-import type { HitDef, ThrowDef } from './schema.ts';
+import type { Character, HitDef, ThrowDef } from './schema.ts';
 import type { Vec2 } from './vec.ts';
 import { vec } from './vec.ts';
 
@@ -121,6 +121,19 @@ export interface World {
   roundTime: number;
   /** After a KO, counts down KO_DELAY→0; the result is finalized at 0 (0 = not in a KO sequence). */
   koCountdown: number;
+}
+
+/**
+ * Half the character's body width for spacing, throw range, and push collision.
+ * Taken from the neutral 'stand' frame's hurtbox (the actual rendered body
+ * silhouette) rather than `size.width`, so a generated character — whose sprite
+ * sits in a padded cell wider than its body — pushes and reaches body-to-body.
+ * Falls back to size.width/2 when no stand hurtbox is available (procedural art,
+ * hand-authored characters whose stand hurtbox already equals size.width).
+ */
+export function bodyHalfWidth(c: Character): number {
+  const hb = c.animations?.['stand']?.frames[0]?.hurtboxes?.[0];
+  return hb ? hb.w / 2 : c.size.width / 2;
 }
 
 export function createWorld(p1Char = 'base', p2Char = 'base'): World {
