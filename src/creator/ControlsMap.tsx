@@ -263,10 +263,64 @@ function FrameStrip({
 }
 
 /**
- * One frame thumbnail. The full atlas is rendered as an absolutely-positioned
- * <img> inside a clipping tile and transformed so just `rect` shows, scaled to
- * fit and centered. A transform avoids needing the atlas's natural dimensions
- * (which background-position cropping would require).
+ * Crop one atlas cell into a `tileW`×`tileH` box. The cell is scaled to fit and
+ * centered; an inner wrapper sized to the *scaled cell* (not the tile) clips the
+ * atlas <img> so only `rect` shows. Clipping at the cell — rather than relying
+ * on the outer tile's `overflow-hidden` — matters whenever the tile aspect
+ * differs from the cell's: the leftover centering pads would otherwise still
+ * sample the neighbouring grid cells, ghosting an adjacent pose into the frame.
+ * A transform (vs background-position) avoids needing the atlas's intrinsic size.
+ */
+function AtlasCrop({
+  rect,
+  sprite,
+  sheetUrl,
+  tileW,
+  tileH,
+}: {
+  rect: FrameRect;
+  sprite: string;
+  sheetUrl: string;
+  tileW: number;
+  tileH: number;
+}): React.JSX.Element {
+  const scale = Math.min(tileW / rect.w, tileH / rect.h);
+  const cellW = rect.w * scale;
+  const cellH = rect.h * scale;
+  const padX = (tileW - cellW) / 2;
+  const padY = (tileH - cellH) / 2;
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        left: padX,
+        top: padY,
+        width: cellW,
+        height: cellH,
+        overflow: 'hidden',
+      }}
+    >
+      <img
+        src={sheetUrl}
+        alt={sprite}
+        draggable={false}
+        className="max-w-none select-none"
+        style={{
+          position: 'absolute',
+          left: 0,
+          top: 0,
+          transformOrigin: 'top left',
+          transform: `scale(${scale}) translate(${-rect.x}px, ${-rect.y}px)`,
+          imageRendering: 'pixelated',
+        }}
+      />
+    </div>
+  );
+}
+
+/**
+ * One frame thumbnail: the atlas cell cropped into a fixed tile (see
+ * {@link AtlasCrop}), or a dashed placeholder when the sprite is unmapped.
  */
 function Thumb({
   rect,
@@ -290,9 +344,6 @@ function Thumb({
       />
     );
   }
-  const scale = Math.min(THUMB_W / rect.w, THUMB_H / rect.h);
-  const padX = (THUMB_W - rect.w * scale) / 2;
-  const padY = (THUMB_H - rect.h * scale) / 2;
   return (
     <button
       type="button"
@@ -301,20 +352,7 @@ function Thumb({
       className="relative shrink-0 cursor-zoom-in overflow-hidden rounded border border-input bg-secondary/30 hover:border-ring"
       style={{ width: THUMB_W, height: THUMB_H }}
     >
-      <img
-        src={sheetUrl}
-        alt={sprite}
-        draggable={false}
-        className="max-w-none select-none"
-        style={{
-          position: 'absolute',
-          left: 0,
-          top: 0,
-          transformOrigin: 'top left',
-          transform: `translate(${padX}px, ${padY}px) scale(${scale}) translate(${-rect.x}px, ${-rect.y}px)`,
-          imageRendering: 'pixelated',
-        }}
-      />
+      <AtlasCrop rect={rect} sprite={sprite} sheetUrl={sheetUrl} tileW={THUMB_W} tileH={THUMB_H} />
     </button>
   );
 }
@@ -371,10 +409,6 @@ function FrameLightbox({
     return () => window.removeEventListener('keydown', onKey);
   }, [step, onClose]);
 
-  const scale = rect ? Math.min(ZOOM_W / rect.w, ZOOM_H / rect.h) : 1;
-  const padX = rect ? (ZOOM_W - rect.w * scale) / 2 : 0;
-  const padY = rect ? (ZOOM_H - rect.h * scale) / 2 : 0;
-
   return (
     <div
       role="dialog"
@@ -408,19 +442,12 @@ function FrameLightbox({
             style={{ width: ZOOM_W, height: ZOOM_H }}
           >
             {rect ? (
-              <img
-                src={sheetUrl}
-                alt={sprite}
-                draggable={false}
-                className="max-w-none select-none"
-                style={{
-                  position: 'absolute',
-                  left: 0,
-                  top: 0,
-                  transformOrigin: 'top left',
-                  transform: `translate(${padX}px, ${padY}px) scale(${scale}) translate(${-rect.x}px, ${-rect.y}px)`,
-                  imageRendering: 'pixelated',
-                }}
+              <AtlasCrop
+                rect={rect}
+                sprite={sprite!}
+                sheetUrl={sheetUrl}
+                tileW={ZOOM_W}
+                tileH={ZOOM_H}
               />
             ) : (
               <span className="absolute inset-0 flex items-center justify-center text-sm text-white/50">

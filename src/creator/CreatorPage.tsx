@@ -90,7 +90,8 @@ function portraitsFromCloud(c: CloudCharacter): PortraitSet | null {
 
 export function CreatorPage() {
   // Shared session (auth + saved characters + gallery) from the layout.
-  const { user, saved, savedError, refreshSaved, gallery, refreshGallery } = useSession();
+  const { user, saved, savedLoaded, savedError, refreshSaved, gallery, refreshGallery } =
+    useSession();
 
   const [apiKey, setApiKey] = useState('');
   const [remember, setRemember] = useState(false);
@@ -482,8 +483,11 @@ export function CreatorPage() {
       set = await generatePortraits(API_BASE, refImage, imageDescription ?? prompt.trim(), token);
       setPortraits(set);
       setPortraitKeys(set.keys ?? null);
-      // Persist the headshot/portrait keys onto the record immediately.
-      if (set.keys) void autoSave(character, undefined, set.keys);
+      // Persist the headshot/portrait keys onto the record immediately. Awaited
+      // (not fire-and-forget) so this pre-sprite save can't land *after* the
+      // post-sprite save below and overwrite the stored character JSON with a
+      // spriteAtlas-less copy — a full-record PutItem, so last write wins.
+      if (set.keys) await autoSave(character, undefined, set.keys);
       setStatus('Portraits ready — now skinning your fighter…');
     } catch (e) {
       setError((e as Error).message);
@@ -631,6 +635,26 @@ export function CreatorPage() {
     swapAtlasUrl(c.atlasUrl); // presigned URL; loadAtlasTextures fetches it
     setStatus(`Loaded "${c.name}".`);
   };
+
+  // A fresh page load (or coming back later) starts the creator blank, so the
+  // fighter you just made isn't active until you pick it from "My characters" by
+  // hand. Auto-load the most recent one as soon as the list arrives — once, and
+  // only while nothing is active and no generation is mid-flight, so it never
+  // overrides a character you're actively creating or editing.
+  const autoLoadedRef = useRef(false);
+  useEffect(() => {
+    if (autoLoadedRef.current || !savedLoaded) return;
+    if (character || busy || imgBusy || portraitBusy) {
+      autoLoadedRef.current = true; // something's already active/in-flight — leave it
+      return;
+    }
+    const newest = saved.find((c) => !c.archived); // backend returns newest-first
+    if (newest) {
+      autoLoadedRef.current = true;
+      loadSaved(newest);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [savedLoaded, saved, character, busy, imgBusy, portraitBusy]);
 
   const removeSaved = async (c: CloudCharacter): Promise<void> => {
     if (!canCloud || !API_BASE) return;
