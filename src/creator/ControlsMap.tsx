@@ -8,6 +8,8 @@ import { buildControlsMap, type ControlRow, type InputVariant } from '@/creator/
 export interface FrameZoom {
   /** Action id the frames belong to (shown as the zoom title). */
   action: string;
+  /** Animation id (may differ from `action`, e.g. hk borrows lk) — for box lookup. */
+  animId: string;
   /** All sprite keys for the action's animation, in order. */
   frames: string[];
   /** Index of the clicked frame within `frames`. */
@@ -15,6 +17,18 @@ export interface FrameZoom {
 }
 
 export type OpenZoom = (zoom: FrameZoom) => void;
+
+/** One collision box, already mapped into cell-pixel space for overlaying. */
+interface OverlayBox {
+  kind: 'hit' | 'hurt';
+  left: number;
+  top: number;
+  w: number;
+  h: number;
+}
+/** Resolve the hit/hurt boxes (cell-pixel space) for one animation frame, or
+ * undefined when box display is off / unavailable. */
+export type BoxesFor = (animId: string, index: number) => OverlayBox[];
 
 /**
  * "Controls" tab for the creator: the frames↔buttons map. For every action it
@@ -31,6 +45,7 @@ export function ControlsMap({
   atlasUrl?: string;
 }): React.JSX.Element {
   const [zoom, setZoom] = useState<FrameZoom | null>(null);
+  const [showBoxes, setShowBoxes] = useState(true);
 
   if (!character) {
     return (
@@ -44,19 +59,67 @@ export function ControlsMap({
   const atlasFrames = character.spriteAtlas?.frames;
   const sheetUrl = atlasUrl;
 
+  // Map a frame's engine hit/hurt boxes (world units, feet-center origin) into
+  // the packed cell's pixel space, inverting the renderer's per-axis sprite
+  // scale — so the boxes overlay exactly where the body/limb is drawn.
+  const anims = character.animations ?? {};
+  const cellPx = atlasFrames ? Object.values(atlasFrames)[0]?.h : undefined;
+  const NEUTRAL_BODY_RATIO = 60 / 110; // must match render/fighter.ts + pack.ts
+  const sx = cellPx ? character.size.width / (cellPx * NEUTRAL_BODY_RATIO) : 1;
+  const sy = cellPx ? character.size.height / cellPx : 1;
+  const boxesFor: BoxesFor | undefined =
+    showBoxes && cellPx
+      ? (animId, index) => {
+          const f = anims[animId]?.frames[index];
+          if (!f) return [];
+          const conv = (
+            b: { x: number; y: number; w: number; h: number },
+            kind: 'hit' | 'hurt',
+          ) => ({
+            kind,
+            left: cellPx / 2 + b.x / sx,
+            top: cellPx - (b.y + b.h) / sy,
+            w: b.w / sx,
+            h: b.h / sy,
+          });
+          return [
+            ...(f.hurtboxes ?? []).map((b) => conv(b, 'hurt')),
+            ...(f.hitboxes ?? []).map((b) => conv(b, 'hit')),
+          ];
+        }
+      : undefined;
+
   return (
     <div className="flex flex-col gap-5">
-      <p className="text-xs text-muted-foreground">
-        Keys are P1 bindings. Move: <Kbd>W</Kbd>
-        <Kbd>A</Kbd>
-        <Kbd>S</Kbd>
-        <Kbd>D</Kbd>. Attacks: <Kbd>U</Kbd>
-        <Kbd>I</Kbd>
-        <Kbd>O</Kbd> / <Kbd>J</Kbd>
-        <Kbd>K</Kbd>
-        <Kbd>L</Kbd>. Each row maps the press to the animation frames it plays.{' '}
-        {sheetUrl && atlasFrames && <span>Click any frame to enlarge it.</span>}
-      </p>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs text-muted-foreground">
+          Keys are P1 bindings. Move: <Kbd>W</Kbd>
+          <Kbd>A</Kbd>
+          <Kbd>S</Kbd>
+          <Kbd>D</Kbd>. Attacks: <Kbd>U</Kbd>
+          <Kbd>I</Kbd>
+          <Kbd>O</Kbd> / <Kbd>J</Kbd>
+          <Kbd>K</Kbd>
+          <Kbd>L</Kbd>. Each row maps the press to the animation frames it plays.{' '}
+          {sheetUrl && atlasFrames && <span>Click any frame to enlarge it.</span>}
+        </p>
+        {sheetUrl && atlasFrames && (
+          <label className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
+            <input
+              type="checkbox"
+              checked={showBoxes}
+              onChange={(e) => setShowBoxes(e.target.checked)}
+            />
+            Boxes
+            <span className="ml-1 inline-flex items-center gap-1">
+              <span className="inline-block h-2 w-3 rounded-sm border border-rose-500 bg-rose-500/30" />
+              hit
+              <span className="ml-1 inline-block h-2 w-3 rounded-sm border border-sky-400 bg-sky-400/30" />
+              hurt
+            </span>
+          </label>
+        )}
+      </div>
 
       <Section
         title="Inputs"
@@ -65,6 +128,7 @@ export function ControlsMap({
         atlasFrames={atlasFrames}
         sheetUrl={sheetUrl}
         onOpen={setZoom}
+        boxesFor={boxesFor}
       />
 
       <Section
@@ -74,6 +138,7 @@ export function ControlsMap({
         atlasFrames={atlasFrames}
         sheetUrl={sheetUrl}
         onOpen={setZoom}
+        boxesFor={boxesFor}
       />
 
       {!sheetUrl && (
@@ -90,6 +155,7 @@ export function ControlsMap({
           sheetUrl={sheetUrl}
           onChange={setZoom}
           onClose={() => setZoom(null)}
+          boxesFor={boxesFor}
         />
       )}
     </div>
@@ -103,6 +169,7 @@ function Section({
   atlasFrames,
   sheetUrl,
   onOpen,
+  boxesFor,
 }: {
   title: string;
   subtitle: string;
@@ -110,6 +177,7 @@ function Section({
   atlasFrames: Record<string, FrameRect> | undefined;
   sheetUrl: string | undefined;
   onOpen: OpenZoom;
+  boxesFor: BoxesFor | undefined;
 }): React.JSX.Element | null {
   if (rows.length === 0) return null;
   return (
@@ -126,6 +194,7 @@ function Section({
             atlasFrames={atlasFrames}
             sheetUrl={sheetUrl}
             onOpen={onOpen}
+            boxesFor={boxesFor}
           />
         ))}
       </div>
@@ -138,11 +207,13 @@ function Row({
   atlasFrames,
   sheetUrl,
   onOpen,
+  boxesFor,
 }: {
   row: ControlRow;
   atlasFrames: Record<string, FrameRect> | undefined;
   sheetUrl: string | undefined;
   onOpen: OpenZoom;
+  boxesFor: BoxesFor | undefined;
 }): React.JSX.Element {
   return (
     <div className="grid grid-cols-1 gap-2 p-2 sm:grid-cols-[minmax(0,9rem)_minmax(0,12rem)_1fr] sm:items-center">
@@ -166,10 +237,12 @@ function Row({
       {/* Frame strip */}
       <FrameStrip
         action={row.id}
+        animId={row.animId}
         frames={row.frames}
         atlasFrames={atlasFrames}
         sheetUrl={sheetUrl}
         onOpen={onOpen}
+        boxesFor={boxesFor}
       />
     </div>
   );
@@ -212,16 +285,20 @@ const THUMB_H = 50;
 
 function FrameStrip({
   action,
+  animId,
   frames,
   atlasFrames,
   sheetUrl,
   onOpen,
+  boxesFor,
 }: {
   action: string;
+  animId: string;
   frames: string[];
   atlasFrames: Record<string, FrameRect> | undefined;
   sheetUrl: string | undefined;
   onOpen: OpenZoom;
+  boxesFor: BoxesFor | undefined;
 }): React.JSX.Element {
   if (frames.length === 0) {
     return <span className="text-xs text-muted-foreground">no frames</span>;
@@ -246,14 +323,15 @@ function FrameStrip({
           rect={atlasFrames![sprite]}
           sprite={sprite}
           sheetUrl={sheetUrl!}
-          onClick={() => onOpen({ action, frames, index: i })}
+          boxes={boxesFor?.(animId, i)}
+          onClick={() => onOpen({ action, animId, frames, index: i })}
         />
       ))}
       {overflow > 0 && (
         <button
           type="button"
           className="text-xs text-muted-foreground hover:text-foreground"
-          onClick={() => onOpen({ action, frames, index: MAX_THUMBS })}
+          onClick={() => onOpen({ action, animId, frames, index: MAX_THUMBS })}
         >
           +{overflow}
         </button>
@@ -277,12 +355,15 @@ function AtlasCrop({
   sheetUrl,
   tileW,
   tileH,
+  boxes,
 }: {
   rect: FrameRect;
   sprite: string;
   sheetUrl: string;
   tileW: number;
   tileH: number;
+  /** Hit/hurt boxes in cell-pixel space (see {@link BoxesFor}), overlaid scaled. */
+  boxes?: OverlayBox[];
 }): React.JSX.Element {
   const scale = Math.min(tileW / rect.w, tileH / rect.h);
   const cellW = rect.w * scale;
@@ -314,6 +395,21 @@ function AtlasCrop({
           imageRendering: 'pixelated',
         }}
       />
+      {boxes?.map((b, i) => (
+        <div
+          key={i}
+          style={{
+            position: 'absolute',
+            left: b.left * scale,
+            top: b.top * scale,
+            width: b.w * scale,
+            height: b.h * scale,
+            border: `1px solid ${b.kind === 'hit' ? 'rgb(244,63,94)' : 'rgb(56,189,248)'}`,
+            background: b.kind === 'hit' ? 'rgba(244,63,94,0.22)' : 'rgba(56,189,248,0.18)',
+            pointerEvents: 'none',
+          }}
+        />
+      ))}
     </div>
   );
 }
@@ -326,11 +422,13 @@ function Thumb({
   rect,
   sprite,
   sheetUrl,
+  boxes,
   onClick,
 }: {
   rect: FrameRect | undefined;
   sprite: string;
   sheetUrl: string;
+  boxes?: OverlayBox[];
   onClick: () => void;
 }): React.JSX.Element {
   if (!rect) {
@@ -352,7 +450,14 @@ function Thumb({
       className="relative shrink-0 cursor-zoom-in overflow-hidden rounded border border-input bg-secondary/30 hover:border-ring"
       style={{ width: THUMB_W, height: THUMB_H }}
     >
-      <AtlasCrop rect={rect} sprite={sprite} sheetUrl={sheetUrl} tileW={THUMB_W} tileH={THUMB_H} />
+      <AtlasCrop
+        rect={rect}
+        sprite={sprite}
+        sheetUrl={sheetUrl}
+        tileW={THUMB_W}
+        tileH={THUMB_H}
+        boxes={boxes}
+      />
     </button>
   );
 }
@@ -372,14 +477,16 @@ function FrameLightbox({
   sheetUrl,
   onChange,
   onClose,
+  boxesFor,
 }: {
   zoom: FrameZoom;
   atlasFrames: Record<string, FrameRect>;
   sheetUrl: string;
   onChange: (zoom: FrameZoom) => void;
   onClose: () => void;
+  boxesFor: BoxesFor | undefined;
 }): React.JSX.Element {
-  const { action, frames, index } = zoom;
+  const { action, animId, frames, index } = zoom;
   const sprite = frames[index];
   const rect = sprite ? atlasFrames[sprite] : undefined;
 
@@ -387,9 +494,9 @@ function FrameLightbox({
     (delta: number) => {
       const next = index + delta;
       if (next < 0 || next >= frames.length) return;
-      onChange({ action, frames, index: next });
+      onChange({ action, animId, frames, index: next });
     },
-    [action, frames, index, onChange],
+    [action, animId, frames, index, onChange],
   );
 
   useEffect(() => {
@@ -448,6 +555,7 @@ function FrameLightbox({
                 sheetUrl={sheetUrl}
                 tileW={ZOOM_W}
                 tileH={ZOOM_H}
+                boxes={boxesFor?.(animId, index)}
               />
             ) : (
               <span className="absolute inset-0 flex items-center justify-center text-sm text-white/50">
