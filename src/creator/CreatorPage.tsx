@@ -77,6 +77,12 @@ import {
   type CloudCharacter,
   type PortraitKeys,
 } from '@/creator/store/cloud.ts';
+import {
+  saveLocalCharacter,
+  deleteLocalCharacter,
+  renameLocalCharacter,
+  archiveLocalCharacter,
+} from '@/creator/store/local.ts';
 import { API_BASE, AUTH_ENABLED, BACKEND_MODE, CAN_CLOUD } from '@/app/config.ts';
 import { useSession } from '@/app/session.ts';
 
@@ -156,6 +162,12 @@ export function CreatorPage() {
   useEffect(() => {
     portraitKeysRef.current = portraitKeys;
   }, [portraitKeys]);
+  // Latest portrait set in a ref so local auto-save (called from several closures)
+  // can persist the portrait blobs alongside the character.
+  const portraitsRef = useRef<PortraitSet | null>(null);
+  useEffect(() => {
+    portraitsRef.current = portraits;
+  }, [portraits]);
   const [portraitBusy, setPortraitBusy] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   // gpt-5.5-generated appearance description (from the uploaded image + notes).
@@ -186,6 +198,10 @@ export function CreatorPage() {
 
   // Cloud storage is available when signed in to the backend.
   const canCloud = CAN_CLOUD;
+  // Characters persist either to the cloud (backend) or to IndexedDB (local
+  // BYOK). Either way "My characters", auto-save, rename/archive/delete work;
+  // only sharing to the public gallery is cloud-only.
+  const canPersist = !BACKEND_MODE || canCloud;
 
   // Backend generation needs a signed-in user when auth is on. Returns the
   // access token, or triggers login (redirect) and returns undefined to abort.
@@ -273,12 +289,28 @@ export function CreatorPage() {
     }
   };
 
-  // Swap in a new atlas object URL, revoking the previous one.
+  // Object URLs we created from freshly-baked atlas blobs this session — the only
+  // ones safe to revoke on swap. Atlas URLs that come from the saved list (local
+  // mode) are shared with the "My characters" thumbnails, so revoking them would
+  // break those; cloud atlas URLs are https (revoke is a harmless no-op anyway).
+  const ownedAtlasUrls = useRef(new Set<string>());
+
+  // Swap in a new atlas URL, revoking the previous one only if WE baked it.
   const swapAtlasUrl = (next: string | undefined): void => {
     setAtlasUrl((prev) => {
-      if (prev && prev !== next) URL.revokeObjectURL(prev);
+      if (prev && prev !== next && ownedAtlasUrls.current.has(prev)) {
+        URL.revokeObjectURL(prev);
+        ownedAtlasUrls.current.delete(prev);
+      }
       return next;
     });
+  };
+
+  // Bake a packed atlas blob into an owned object URL and show it.
+  const swapToBakedAtlas = (blob: Blob): void => {
+    const url = URL.createObjectURL(blob);
+    ownedAtlasUrls.current.add(url);
+    swapAtlasUrl(url);
   };
 
   // Release the previous sheet's object URL + decoded bitmap when it is replaced
@@ -312,7 +344,7 @@ export function CreatorPage() {
       packed.frames,
       packed.hurtboxes,
     );
-    swapAtlasUrl(URL.createObjectURL(packed.atlasBlob));
+    swapToBakedAtlas(packed.atlasBlob);
     setCharacter(sprited);
     void autoSave(sprited, packed.atlasBlob);
   };
@@ -493,7 +525,7 @@ export function CreatorPage() {
         packed.frames,
         packed.hurtboxes,
       );
-      swapAtlasUrl(URL.createObjectURL(packed.atlasBlob));
+      swapToBakedAtlas(packed.atlasBlob);
       setCharacter(sprited);
       setStatus('Sprites generated. Your fighter is ready to play.');
       setRightTab('playtest'); // ready → bring the finished fighter into view
@@ -708,7 +740,7 @@ export function CreatorPage() {
           packed.frames,
           packed.hurtboxes,
         );
-        swapAtlasUrl(URL.createObjectURL(packed.atlasBlob));
+        swapToBakedAtlas(packed.atlasBlob);
         setCharacter(sprited);
         setStatus('Sprites generated.');
         setRightTab('playtest'); // ready → show the finished fighter
@@ -734,6 +766,25 @@ export function CreatorPage() {
     atlas?: Blob | null,
     portraitKeysOverride?: PortraitKeys | null,
   ): Promise<void> => {
+    if (!BACKEND_MODE) {
+      // Local BYOK persistence (IndexedDB): store the character + atlas blob +
+      // portrait blobs. saveLocalCharacter merges, so a partial save (no atlas)
+      // never wipes previously baked sprites.
+      setSaveState('saving');
+      try {
+        await saveLocalCharacter({
+          character: char,
+          name: char.meta.name,
+          atlas: atlas ?? undefined,
+          portraits: portraitsRef.current?.blobs ?? null,
+        });
+        setSaveState('saved');
+        await refreshSaved();
+      } catch {
+        setSaveState('error');
+      }
+      return;
+    }
     if (!canCloud || !API_BASE) return;
     setSaveState('saving');
     try {
@@ -799,11 +850,17 @@ export function CreatorPage() {
   }, [savedLoaded, saved, character, busy, imgBusy, portraitBusy]);
 
   const removeSaved = async (c: CloudCharacter): Promise<void> => {
-    if (!canCloud || !API_BASE) return;
+    if (!canPersist) return;
     if (!window.confirm(`Permanently delete "${c.name}"? This can't be undone.`)) return;
-    const token = await getAccessToken();
-    if (!token) return;
     try {
+      if (!BACKEND_MODE) {
+        await deleteLocalCharacter(c.characterId);
+        await refreshSaved();
+        return;
+      }
+      if (!API_BASE) return;
+      const token = await getAccessToken();
+      if (!token) return;
       await deleteCloudCharacter(API_BASE, token, c.characterId);
       await refreshSaved();
       await refreshGallery();
@@ -819,11 +876,16 @@ export function CreatorPage() {
     }
     setRenaming(null);
     const trimmed = name.trim();
-    if (!canCloud || !API_BASE || !trimmed) return;
-    const token = await getAccessToken();
-    if (!token) return;
+    if (!canPersist || !trimmed) return;
     try {
-      await renameCloudCharacter(API_BASE, token, id, trimmed);
+      if (!BACKEND_MODE) {
+        await renameLocalCharacter(id, trimmed);
+      } else {
+        if (!API_BASE) return;
+        const token = await getAccessToken();
+        if (!token) return;
+        await renameCloudCharacter(API_BASE, token, id, trimmed);
+      }
       // Keep the loaded character's name in sync if it's the one being renamed.
       if (character?.meta.id === id) {
         setCharacter({ ...character, meta: { ...character.meta, name: trimmed } });
@@ -836,10 +898,16 @@ export function CreatorPage() {
   };
 
   const setArchived = async (id: string, archived: boolean): Promise<void> => {
-    if (!canCloud || !API_BASE) return;
-    const token = await getAccessToken();
-    if (!token) return;
+    if (!canPersist) return;
     try {
+      if (!BACKEND_MODE) {
+        await archiveLocalCharacter(id, archived);
+        await refreshSaved();
+        return;
+      }
+      if (!API_BASE) return;
+      const token = await getAccessToken();
+      if (!token) return;
       await archiveCloudCharacter(API_BASE, token, id, archived);
       await refreshSaved();
       await refreshGallery();
@@ -1138,7 +1206,7 @@ export function CreatorPage() {
                         ? 'Sprites are generated on the BrawlBox API (fal retexture). Takes about a minute.'
                         : 'Sprite generation makes one image API call per animation frame (billed to your key). Takes a minute or two.'}
                   </p>
-                  {canCloud && saveState !== 'idle' && (
+                  {canPersist && saveState !== 'idle' && (
                     <p
                       className={
                         saveState === 'error'
@@ -1149,7 +1217,9 @@ export function CreatorPage() {
                       {saveState === 'saving'
                         ? 'Saving to your collection…'
                         : saveState === 'saved'
-                          ? 'Saved to your collection — it will be here when you sign back in.'
+                          ? BACKEND_MODE
+                            ? 'Saved to your collection — it will be here when you sign back in.'
+                            : 'Saved to your collection — it will be here when you come back (this browser).'
                           : "Couldn't save to your collection (it's still here for now — try regenerating)."}
                     </p>
                   )}
@@ -1161,7 +1231,7 @@ export function CreatorPage() {
             </CardContent>
           </Card>
 
-          {canCloud && user && (
+          {canPersist && (!BACKEND_MODE || user) && (
             <Card>
               <CardHeader>
                 <CardTitle>My characters</CardTitle>
@@ -1170,7 +1240,9 @@ export function CreatorPage() {
                 {savedError && <p className="text-sm text-destructive">{savedError}</p>}
                 {!savedError && saved.length === 0 && (
                   <p className="text-sm text-muted-foreground">
-                    Characters you generate are saved here automatically and stay across sign-ins.
+                    {BACKEND_MODE
+                      ? 'Characters you generate are saved here automatically and stay across sign-ins.'
+                      : 'Characters you generate are saved here automatically, on this device.'}
                   </p>
                 )}
                 {activeSaved.map((c) => {
@@ -1235,14 +1307,16 @@ export function CreatorPage() {
                             >
                               Rename
                             </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              disabled={locked}
-                              onClick={() => void toggleShare(c)}
-                            >
-                              {c.shared ? 'Unshare' : 'Share'}
-                            </Button>
+                            {canCloud && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                disabled={locked}
+                                onClick={() => void toggleShare(c)}
+                              >
+                                {c.shared ? 'Unshare' : 'Share'}
+                              </Button>
+                            )}
                             <Button
                               variant="ghost"
                               size="sm"

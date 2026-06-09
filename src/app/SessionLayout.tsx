@@ -4,6 +4,7 @@ import type { User } from 'oidc-client-ts';
 import { Button } from '@/components/ui/button.tsx';
 import { handleRedirectCallback, getAccessToken, login, logout, userEmail } from '@/auth/auth.ts';
 import { listCloudCharacters, listGallery, type CloudCharacter } from '@/creator/store/cloud.ts';
+import { listLocalCharacters } from '@/creator/store/local.ts';
 import { API_BASE, AUTH_ENABLED, BACKEND_MODE, CAN_CLOUD } from '@/app/config.ts';
 import type { Session } from '@/app/session.ts';
 
@@ -30,6 +31,18 @@ export function SessionLayout() {
   }, []);
 
   const refreshSaved = async (): Promise<void> => {
+    if (!BACKEND_MODE) {
+      // Local BYOK mode: characters persist in IndexedDB (no backend/auth).
+      try {
+        setSaved(await listLocalCharacters());
+        setSavedError(null);
+      } catch (e) {
+        setSavedError(`Couldn't load your local characters (${(e as Error).message}).`);
+      } finally {
+        setSavedLoaded(true);
+      }
+      return;
+    }
     if (!CAN_CLOUD || !user || !API_BASE) {
       setSavedLoaded(true);
       return;
