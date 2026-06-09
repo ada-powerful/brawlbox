@@ -12,6 +12,7 @@
 import type { Character } from '@/engine/schema.ts';
 import { MANNEQUIN_CHARACTER } from '@/sandbox/mannequin.ts';
 import kfm2liteTemplateRaw from '@/sandbox/kfm2lite-template.json' with { type: 'json' };
+import kfm2liteTemplateSheetUrl from '@/sandbox/kfm2lite-template.png';
 import type { GridTemplateSpec } from '@/creator/image/sliceGrid.ts';
 import type { RGB } from '@/creator/image/alpha.ts';
 
@@ -29,6 +30,12 @@ export interface CharacterTemplate {
   hint: string;
   /** S3 key the backend retextures (sent as `templateKey` to /generate/sprites). */
   backendTemplateKey: string;
+  /**
+   * Bundled green-screen layout sheet, used by the local BYOK path (no backend):
+   * NB2 re-skins this sheet directly in the browser. Original CC0 art (the demo
+   * mannequin posed in the template grid) — safe to ship publicly.
+   */
+  templateSheetUrl: string;
   /** Base character whose state machine / anims / timings the fighter reuses. */
   base: Character;
   /** Grid structure (rows/cols + cell map) used to map detected poses to keys. */
@@ -54,6 +61,7 @@ export const TEMPLATES: CharacterTemplate[] = [
     label: 'Bajiquan Brawler (Lite)',
     hint: 'A leaner 26-move brawler on a roomier sheet — cleaner art, sharper faces. Your description sets the look.',
     backendTemplateKey: 'templates/kfm2lite.png',
+    templateSheetUrl: kfm2liteTemplateSheetUrl,
     base: MANNEQUIN_CHARACTER,
     grid: gridSpec(kfm2liteTemplateRaw),
     bg: { r: 0, g: 255, b: 0 }, // chroma-green screen

@@ -12,17 +12,38 @@ import { generateCharacterViaBackend } from '@/ai/backend.ts';
 import {
   fetchSheetAndDetect,
   fetchSheetBitmap,
+  reskinTemplateBYOK,
   cropSelection,
   type DetectedSheet,
+  type FetchedSheet,
 } from '@/ai/spritesBackend.ts';
 import { getAccessToken, login } from '@/auth/auth.ts';
-import { CHROMA, defaultBackgroundForModel, generateCharacterSprites } from '@/ai/image.ts';
-import { clearKey, getEnvKey, getKey, setKey } from '@/ai/keystore.ts';
+import {
+  CHROMA,
+  defaultBackgroundForModel,
+  generateCharacterSprites,
+  generateGreenReference,
+} from '@/ai/image.ts';
+import {
+  clearKey,
+  getEnvKey,
+  getKey,
+  setKey,
+  clearFalKey,
+  getEnvFalKey,
+  getFalKey,
+  setFalKey,
+} from '@/ai/keystore.ts';
 import { applySpritesToCharacter } from '@/creator/image/pack.ts';
 import { packSprites } from '@/creator/image/packAtlas.ts';
 import { sliceSheetByDetection } from '@/creator/image/detectSlice.ts';
-import { generatePortraits, fileToDataUri, type PortraitSet } from '@/ai/portraits.ts';
-import { describeFromImage } from '@/ai/describe.ts';
+import {
+  generatePortraits,
+  generatePortraitsBYOK,
+  fileToDataUri,
+  type PortraitSet,
+} from '@/ai/portraits.ts';
+import { describeFromImage, describeFromImageBYOK } from '@/ai/describe.ts';
 import { collectReferencedSprites } from '@/runtime/atlas.ts';
 import {
   TEMPLATES,
@@ -71,6 +92,9 @@ const withUniqueId = (c: Character): Character => ({
 
 // A key from .env (if any) takes over — the manual key card is then hidden.
 const ENV_KEY = getEnvKey();
+// fal.ai key from .env, for the local BYOK photo→fighter path (portraits +
+// sprite re-skin). Hides the fal key card when present.
+const ENV_FAL_KEY = getEnvFalKey();
 // Image model; the project validated gpt-image-2. Override with VITE_IMAGE_MODEL.
 const IMAGE_MODEL = (import.meta.env?.VITE_IMAGE_MODEL as string | undefined) || 'gpt-image-2';
 
@@ -95,6 +119,9 @@ export function CreatorPage() {
 
   const [apiKey, setApiKey] = useState('');
   const [remember, setRemember] = useState(false);
+  // fal.ai key for the local BYOK photo→fighter path (portraits + sprite re-skin).
+  const [falKeyInput, setFalKeyInput] = useState('');
+  const [rememberFal, setRememberFal] = useState(false);
   // How the next fighter is created: from a text prompt, or from a reference
   // photo (separate flows with different steps — see the controls below).
   const [mode, setMode] = useState<Mode>('photo');
@@ -182,6 +209,13 @@ export function CreatorPage() {
         setRemember(true);
       }
     }
+    if (!ENV_FAL_KEY) {
+      const f = getFalKey();
+      if (f) {
+        setFalKeyInput(f);
+        setRememberFal(true);
+      }
+    }
   }, []);
 
   const resolveKey = (): string | null => {
@@ -197,6 +231,28 @@ export function CreatorPage() {
     setApiKey(key);
     if (key) setKey(key, persist);
     else clearKey();
+  };
+
+  // An OpenAI key if one is available (env or entered), else null. Used by the
+  // local photo path for the optional vision "describe" — never errors, since
+  // naming/description is a best-effort nicety on top of the fal-driven art.
+  const optionalOpenAIKey = (): string | null => ENV_KEY ?? (apiKey.trim() || null);
+
+  // fal.ai key for the local BYOK path. Errors (and returns null) when missing —
+  // portraits + sprite re-skin can't run without it.
+  const resolveFalKey = (): string | null => {
+    const key = ENV_FAL_KEY ?? falKeyInput.trim();
+    if (!key) {
+      setError('Enter a fal.ai API key first (needed for local photo→fighter generation).');
+      return null;
+    }
+    return key;
+  };
+
+  const persistFalKey = (key: string, persist: boolean): void => {
+    setFalKeyInput(key);
+    if (key) setFalKey(key, persist);
+    else clearFalKey();
   };
 
   // Switching the creation mode resets the inputs that don't belong to the new
@@ -286,7 +342,7 @@ export function CreatorPage() {
       name = attributesToName(attrs);
       described = attributesToDescription(attrs, lookNotes);
     } else if (refImage && BACKEND_MODE && API_BASE) {
-      // Photo mode: gpt-5.5 names + describes the character from the image.
+      // Photo mode: the backend vision model names + describes from the image.
       const token = await ensureToken();
       if (token === undefined) return; // redirecting to sign in
       setStatus('Reading your photo…');
@@ -297,6 +353,21 @@ export function CreatorPage() {
       } catch (e) {
         // Non-fatal: fall back to the template label / prompt for naming.
         setError(`Couldn't read the photo (using defaults): ${(e as Error).message}`);
+      }
+    } else if (refImage && !BACKEND_MODE) {
+      // Local BYOK photo mode: describe via OpenAI vision directly IF a key is
+      // present — purely a naming nicety, so skip silently when there's no key
+      // (the photo itself still drives the portrait + sprite art via fal).
+      const key = optionalOpenAIKey();
+      if (key) {
+        setStatus('Reading your photo…');
+        try {
+          const idea = await describeFromImageBYOK(key, refImage, prompt.trim());
+          if (idea.name) name = idea.name;
+          described = idea.description || null;
+        } catch (e) {
+          setError(`Couldn't read the photo (using defaults): ${(e as Error).message}`);
+        }
       }
     }
     setImageDescription(described);
@@ -390,23 +461,14 @@ export function CreatorPage() {
   // Template path: NB2 re-skins the template's green-screen layout sheet, then
   // we slice it by the fixed grid (no auto-detect), key out the green, and bake
   // the art onto the current character. Deterministic — no frame-review console.
-  const generateTemplateSprites = async (
+  // Shared tail for both template paths (backend + local BYOK): slice the
+  // retextured sheet by the template grid, key out the green, bake the atlas,
+  // apply it, and show the fighter. Owns + disposes `fetched`.
+  const bakeReskinnedSheet = async (
     tpl: CharacterTemplate,
     char: Character,
-    token: string | null | undefined,
-    baseUrl: string,
-    // The portraits to steer the re-skin. Passed in by the merged flow (fresh,
-    // not yet in state); falls back to whatever's in state otherwise.
-    portraitSet?: PortraitSet | null,
+    fetched: FetchedSheet,
   ): Promise<void> => {
-    const refs = portraitSet ?? portraits;
-    const fetched = await fetchSheetBitmap(
-      baseUrl,
-      imageDescription ?? prompt.trim(),
-      token,
-      tpl.backendTemplateKey,
-      refs ? { frontUrl: refs.front, backUrl: refs.back } : undefined,
-    );
     try {
       const keys = collectReferencedSprites(char);
       // Detect poses by their green gaps (robust to NB2's variable output size/
@@ -435,11 +497,63 @@ export function CreatorPage() {
       setCharacter(sprited);
       setStatus('Sprites generated. Your fighter is ready to play.');
       setRightTab('playtest'); // ready → bring the finished fighter into view
-      void autoSave(sprited, packed.atlasBlob);
+      void autoSave(sprited, packed.atlasBlob); // no-ops without a backend
     } finally {
       fetched.bitmap.close();
       URL.revokeObjectURL(fetched.sheetUrl);
     }
+  };
+
+  // Backend template path: API re-skins the green-screen sheet, then bake.
+  const generateTemplateSprites = async (
+    tpl: CharacterTemplate,
+    char: Character,
+    token: string | null | undefined,
+    baseUrl: string,
+    // The portraits to steer the re-skin. Passed in by the merged flow (fresh,
+    // not yet in state); falls back to whatever's in state otherwise.
+    portraitSet?: PortraitSet | null,
+  ): Promise<void> => {
+    const refs = portraitSet ?? portraits;
+    const fetched = await fetchSheetBitmap(
+      baseUrl,
+      imageDescription ?? prompt.trim(),
+      token,
+      tpl.backendTemplateKey,
+      refs ? { frontUrl: refs.front, backUrl: refs.back } : undefined,
+    );
+    await bakeReskinnedSheet(tpl, char, fetched);
+  };
+
+  // Local BYOK template path: nano-banana-2 re-skins the bundled green-screen
+  // sheet in the browser (user's fal key + front/back portrait blobs), then bake.
+  const generateTemplateSpritesBYOK = async (
+    tpl: CharacterTemplate,
+    char: Character,
+    falKey: string,
+    portraitSet?: PortraitSet | null,
+  ): Promise<void> => {
+    const description = imageDescription ?? prompt.trim();
+    const portraitRefs = portraitSet ?? portraits;
+    let refs: { front: Blob; back: Blob } | { reference: Blob };
+    if (portraitRefs?.blobs) {
+      // Photo flow: front + back portraits keep poses on-model from both sides.
+      refs = { front: portraitRefs.blobs.front, back: portraitRefs.blobs.back };
+    } else {
+      // Attributes flow (no photo): make one OpenAI reference from the description.
+      const key = optionalOpenAIKey();
+      if (!key) {
+        throw new Error(
+          'Add a reference photo, or enter an OpenAI key, to generate this fighter’s look locally.',
+        );
+      }
+      setStatus('Designing a reference look…');
+      refs = { reference: await generateGreenReference(key, description || char.meta.name) };
+    }
+    const fetched = await reskinTemplateBYOK(falKey, tpl.templateSheetUrl, description, refs, (s) =>
+      setStatus(`Skinning your fighter… (${s.toLowerCase()})`),
+    );
+    await bakeReskinnedSheet(tpl, char, fetched);
   };
 
   // Pick + downscale a reference photo. Clears any stale portraits so the next
@@ -469,24 +583,40 @@ export function CreatorPage() {
     if (!character || !refImage) return;
     setError(null);
     setStatus(null);
-    if (!API_BASE) {
-      setError('Generation needs the BrawlBox API (set VITE_API_BASE_URL).');
-      return;
+    const description = imageDescription ?? prompt.trim();
+    // Resolve credentials per mode up front: backend needs a (maybe) token;
+    // the local BYOK path needs the user's fal key.
+    let token: string | null | undefined = null;
+    let falKey: string | null = null;
+    if (BACKEND_MODE) {
+      if (!API_BASE) {
+        setError('Generation needs the BrawlBox API (set VITE_API_BASE_URL).');
+        return;
+      }
+      token = await ensureToken();
+      if (token === undefined) return; // redirecting to sign in
+    } else {
+      falKey = resolveFalKey();
+      if (!falKey) return;
     }
-    const token = await ensureToken();
-    if (token === undefined) return; // redirecting to sign in
     setRightTab('portraits'); // watch portraits land, then "generating sprites…"
     setGeneratingId(character.meta.id); // keep the "My characters" badge up for both phases
     setPortraitBusy(true);
     let set: PortraitSet;
     try {
-      set = await generatePortraits(API_BASE, refImage, imageDescription ?? prompt.trim(), token);
+      set =
+        BACKEND_MODE && API_BASE
+          ? await generatePortraits(API_BASE, refImage, description, token)
+          : await generatePortraitsBYOK(falKey!, refImage, description, (s) =>
+              setStatus(`Generating portraits… (${s.toLowerCase()})`),
+            );
       setPortraits(set);
       setPortraitKeys(set.keys ?? null);
-      // Persist the headshot/portrait keys onto the record immediately. Awaited
+      // Backend persists the portrait keys onto the record immediately. Awaited
       // (not fire-and-forget) so this pre-sprite save can't land *after* the
       // post-sprite save below and overwrite the stored character JSON with a
-      // spriteAtlas-less copy — a full-record PutItem, so last write wins.
+      // spriteAtlas-less copy — a full-record PutItem, so last write wins. The
+      // local BYOK path has no keys (no S3) and autoSave no-ops without a backend.
       if (set.keys) await autoSave(character, undefined, set.keys);
       setStatus('Portraits ready — now skinning your fighter…');
     } catch (e) {
@@ -504,19 +634,31 @@ export function CreatorPage() {
     if (!character) return;
     setError(null);
     setStatus(null);
-    // Template path always retextures server-side (NB2), so it needs a token.
+    // Template path: NB2 re-skins the green-screen sheet — server-side with the
+    // backend, or locally in the browser with the user's fal key (BYOK).
     if (template) {
-      if (!API_BASE) {
-        setError('Sprite generation needs the BrawlBox API (set VITE_API_BASE_URL).');
-        return;
+      let token: string | null | undefined = null;
+      let falKey: string | null = null;
+      if (BACKEND_MODE) {
+        if (!API_BASE) {
+          setError('Sprite generation needs the BrawlBox API (set VITE_API_BASE_URL).');
+          return;
+        }
+        token = await ensureToken();
+        if (token === undefined) return; // redirecting to sign in
+      } else {
+        falKey = resolveFalKey();
+        if (!falKey) return;
       }
-      const token = await ensureToken();
-      if (token === undefined) return; // redirecting to sign in
       setImgBusy(true);
       setGeneratingId(character.meta.id);
       setImgProgress({ done: 0, total: 0 });
       try {
-        await generateTemplateSprites(template, character, token, API_BASE, portraitSet);
+        if (BACKEND_MODE && API_BASE) {
+          await generateTemplateSprites(template, character, token, API_BASE, portraitSet);
+        } else {
+          await generateTemplateSpritesBYOK(template, character, falKey!, portraitSet);
+        }
       } catch (e) {
         setError((e as Error).message);
       } finally {
@@ -766,7 +908,42 @@ export function CreatorPage() {
                 <p className="text-xs text-muted-foreground">
                   {BACKEND_MODE
                     ? 'Only needed for sprite generation. Character generation uses the BrawlBox API — no key required.'
-                    : 'Sent only to api.openai.com, never to any BrawlBox server.'}
+                    : 'Used for text/attribute generation, and to auto-name a photo fighter (optional for photos). Sent only to api.openai.com, never to any BrawlBox server.'}
+                </p>
+              </CardContent>
+            </Card>
+          )}
+
+          {!ENV_FAL_KEY && !BACKEND_MODE && (
+            <Card>
+              <CardHeader>
+                <CardTitle>fal.ai key</CardTitle>
+              </CardHeader>
+              <CardContent className="flex flex-col gap-3">
+                <Input
+                  type="password"
+                  placeholder="fal key (id:secret)"
+                  value={falKeyInput}
+                  onChange={(e) => persistFalKey(e.target.value, rememberFal)}
+                  autoComplete="off"
+                />
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="remember-fal" className="text-muted-foreground">
+                    Remember on this device
+                  </Label>
+                  <Switch
+                    id="remember-fal"
+                    checked={rememberFal}
+                    onCheckedChange={(v) => {
+                      setRememberFal(v);
+                      persistFalKey(falKeyInput, v);
+                    }}
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Drives the photo→fighter flow locally (portraits + sprite re-skin via
+                  nano-banana-2). Sent only to fal.run, never to any BrawlBox server. Get one at
+                  fal.ai/dashboard/keys.
                 </p>
               </CardContent>
             </Card>

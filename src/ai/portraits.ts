@@ -2,12 +2,20 @@
 // headshot or full-body photo the user uploaded) and get back consistent
 // front + back full-body views and a headshot (NB2-generated, white bg).
 // front+back then feed the action-sheet retexture so every pose stays on-model.
+import { falEdit } from './fal.ts';
 
 export interface PortraitSet {
   front: string;
   back: string;
   headshot: string;
   keys?: { front: string; back: string; headshot: string };
+  /**
+   * Raw blobs (BYOK/local path only). Kept so the sprite re-skin can re-feed the
+   * front/back portraits to nano-banana-2 inline (the display fields are blob:
+   * object URLs, which fal's servers can't fetch). Absent on the backend path,
+   * which uses presigned S3 URLs that fal can fetch directly.
+   */
+  blobs?: { front: Blob; back: Blob; headshot: Blob };
 }
 
 /**
@@ -49,4 +57,55 @@ export async function generatePortraits(
     throw new Error(`Portrait generation failed (${res.status})${text ? `: ${text}` : ''}`);
   }
   return (await res.json()) as PortraitSet;
+}
+
+/**
+ * BYOK variant of {@link generatePortraits}: generates the front/back/headshot
+ * set in the browser via nano-banana-2 with the user's own fal key — no backend,
+ * no S3. `front` is made first (the canonical look), then back + headshot are
+ * derived from it in parallel so they stay consistent. Returns blob: object URLs
+ * for display plus the raw blobs (for the inline sprite re-skin).
+ */
+export async function generatePortraitsBYOK(
+  falKey: string,
+  image: string,
+  description: string,
+  onStatus?: (status: string) => void,
+): Promise<PortraitSet> {
+  const desc = description ? ` (${description})` : '';
+  const fal = { falKey, outputFormat: 'png' as const, safetyTolerance: '6', onStatus };
+
+  const front = await falEdit(
+    [image],
+    `A clean full-body character reference of the subject in the image${desc}. Front view, ` +
+      `facing the camera, standing straight in a neutral relaxed pose, full body from head to toe, ` +
+      `centered, on a plain solid pure-white studio background. Faithfully preserve the subject's ` +
+      `face, hairstyle, outfit, colors and body proportions. Sharp, well-lit, no text, no props.`,
+    { ...fal, resolution: '2K', aspectRatio: '3:4' },
+  );
+
+  const [back, headshot] = await Promise.all([
+    falEdit(
+      [image, front],
+      `Full-body standing BACK view of the exact same character shown in the images${desc}. Seen ` +
+        `directly from behind (back of the head and body), standing straight, full body head to toe, ` +
+        `centered, on a plain solid pure-white studio background. Identical outfit, hair, colors and ` +
+        `proportions as the front view. Sharp, well-lit, no text.`,
+      { ...fal, resolution: '2K', aspectRatio: '3:4' },
+    ),
+    falEdit(
+      [front],
+      `Formal head-and-shoulders headshot portrait of the same character${desc}. Front-facing, ` +
+        `friendly neutral expression, centered, on a plain solid pure-white studio background. ` +
+        `Preserve the face, hairstyle and colors exactly. Sharp, well-lit, no text.`,
+      { ...fal, resolution: '2K', aspectRatio: '1:1' },
+    ),
+  ]);
+
+  return {
+    front: URL.createObjectURL(front),
+    back: URL.createObjectURL(back),
+    headshot: URL.createObjectURL(headshot),
+    blobs: { front, back, headshot },
+  };
 }

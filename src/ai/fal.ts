@@ -8,6 +8,10 @@ export interface FalEditOptions {
   falKey: string;
   resolution?: FalResolution;
   outputFormat?: 'png' | 'jpeg' | 'webp';
+  /** Output aspect ratio. 'auto' keeps the (first) input image's shape. */
+  aspectRatio?: '1:1' | '3:4' | '4:3' | '16:9' | '9:16' | '21:9' | 'auto';
+  /** fal moderation tolerance ('6' = most permissive). */
+  safetyTolerance?: string;
   seed?: number;
   fetchImpl?: typeof fetch;
   /** Poll status callback: 'IN_QUEUE' | 'IN_PROGRESS' | 'COMPLETED'. */
@@ -82,6 +86,8 @@ export async function falEdit(
       resolution: options.resolution ?? '2K',
       output_format: options.outputFormat ?? 'png',
       num_images: 1,
+      ...(options.aspectRatio ? { aspect_ratio: options.aspectRatio } : {}),
+      ...(options.safetyTolerance ? { safety_tolerance: options.safetyTolerance } : {}),
       ...(options.seed !== undefined ? { seed: options.seed } : {}),
     }),
     signal: options.signal,

@@ -13,6 +13,7 @@ import { collectReferencedSprites } from '../runtime/atlas.ts';
 import { detectFrames } from '../creator/image/detectFrames.ts';
 import { selectFrameIndices } from '../creator/image/templateManifest.ts';
 import type { PixelBox, RGB } from '../creator/image/alpha.ts';
+import { falEdit } from './fal.ts';
 
 /** A fetched retextured sheet: decoded bitmap + its sampled background color. */
 export interface FetchedSheet {
@@ -127,6 +128,69 @@ export async function fetchSheetBitmap(
   const bitmap = await createImageBitmap(blob);
   return {
     sheetUrl: URL.createObjectURL(blob),
+    bitmap,
+    width: bitmap.width,
+    height: bitmap.height,
+    bg: sampleCorner(bitmap),
+  };
+}
+
+/**
+ * BYOK variant of {@link fetchSheetBitmap}: re-skins a bundled green-screen
+ * template sheet into the described character entirely in the browser via
+ * nano-banana-2 (the user's fal key), using their front+back portraits as the
+ * look reference. No backend, no S3. Returns the same {@link FetchedSheet} shape
+ * the slicer consumes. Mirrors the server prompt in brawlbox-api `sprites.ts`.
+ */
+export async function reskinTemplateBYOK(
+  falKey: string,
+  templateSheetUrl: string,
+  description: string,
+  // Front+back portraits (photo flow) keep poses on-model from both sides; a
+  // single reference (attributes flow, no photo) is fine when there's no back.
+  refs: { front: Blob; back: Blob } | { reference: Blob },
+  onStatus?: (status: string) => void,
+): Promise<FetchedSheet> {
+  const templateRes = await fetch(templateSheetUrl);
+  if (!templateRes.ok) throw new Error(`loading template sheet failed (${templateRes.status})`);
+  const template = await templateRes.blob();
+
+  const usePortraits = 'front' in refs;
+  const refImages = usePortraits ? [refs.front, refs.back] : [refs.reference];
+  const refClause = usePortraits
+    ? `The remaining images are FRONT and BACK reference views of one character. Repaint EVERY ` +
+      `pose/frame so the character matches those references exactly (use the back view for poses ` +
+      `seen from behind)`
+    : `The second image is a different character. Repaint EVERY pose/frame so the character looks ` +
+      `exactly like it`;
+
+  const GREEN = 'solid flat chroma-green (#00FF00) background';
+  const prompt =
+    `The first image is a 2D fighting-game sprite sheet showing one character in many poses on a ` +
+    `${GREEN}. ${refClause} (${description}), while preserving the EXACT sheet layout: same frame ` +
+    `positions, same poses, same sizes, and the same ${GREEN} between and around every pose. Output ` +
+    `the sheet at the SAME canvas dimensions and aspect ratio as the first image, with every pose ` +
+    `kept in its original grid cell — do NOT crop, pad, resize, rotate, or rearrange the layout. Do ` +
+    `not use that background color anywhere on the character. Each pose contains ONLY the lone ` +
+    `character figure: repaint exactly what the source frame already draws (body, hair, clothing, ` +
+    `skin) and leave the rest of the cell as plain background. Render EVERY pose PHOTOREALISTICALLY ` +
+    `— real skin/fabric/material textures, natural lighting and shading that match the reference; do ` +
+    `NOT keep the source sheet's flat 2D game-art look. Render each pose as a tack-sharp, in-focus ` +
+    `frozen still with clean, crisp figure edges. Fill the whole background — between and around ` +
+    `every pose — with one perfectly flat, even, solid chroma-green (#00FF00), identical across the ` +
+    `entire sheet, meeting the character at a clean hard edge.`;
+
+  const sheet = await falEdit([template, ...refImages], prompt, {
+    falKey,
+    resolution: '4K',
+    aspectRatio: 'auto',
+    safetyTolerance: '6',
+    outputFormat: 'png',
+    onStatus,
+  });
+  const bitmap = await createImageBitmap(sheet);
+  return {
+    sheetUrl: URL.createObjectURL(sheet),
     bitmap,
     width: bitmap.width,
     height: bitmap.height,

@@ -110,6 +110,34 @@ async function generate(apiKey: string, prompt: string, opts: ResolvedOpts): Pro
   return firstImage((await res.json()) as ImagesResponse);
 }
 
+/**
+ * BYOK single full-body reference image on a flat chroma-green backdrop — the
+ * look reference for the local template re-skin when there's no uploaded photo
+ * (attributes mode). Mirrors the server `generateReference` prompt. Calls OpenAI
+ * images directly with the user's key.
+ */
+export async function generateGreenReference(
+  apiKey: string,
+  description: string,
+  model = 'gpt-image-2',
+): Promise<Blob> {
+  const opts: ResolvedOpts = {
+    model,
+    size: '1024x1024',
+    baseUrl: 'https://api.openai.com/v1',
+    fetchImpl: fetch.bind(globalThis),
+    background: 'chroma',
+  };
+  const prompt =
+    `Full-body PHOTOREALISTIC fighting-game character: ${description}. Photographic realism — ` +
+    `real skin, fabric, and material textures, natural cinematic lighting with grounded shadows, ` +
+    `high detail. NOT cartoon, NOT cel-shaded, NOT anime, NOT flat 2D game art. Standing neutral ` +
+    `fighting stance, facing right, full body head-to-toe, centered, solid flat chroma-green ` +
+    `(#00FF00) background that completely fills the frame; do not use that background color ` +
+    `anywhere on the character itself. Crisp focus, no text.`;
+  return generate(apiKey, prompt, opts);
+}
+
 /** Edit the reference frame into a new pose, preserving the character design. */
 async function edit(
   apiKey: string,
