@@ -10,9 +10,7 @@
 // body type + martial-arts style, and those parameters will map to a template
 // id here. The registry shape is built for that — add templates and a selector.
 import type { Character } from '@/engine/schema.ts';
-import { KFM2_CHARACTER } from '@/sandbox/kfm2.ts';
-import { KFM2LITE_CHARACTER } from '@/sandbox/kfm2lite.ts';
-import kfm2TemplateRaw from '@/sandbox/kfm2-template.json' with { type: 'json' };
+import { MANNEQUIN_CHARACTER } from '@/sandbox/mannequin.ts';
 import kfm2liteTemplateRaw from '@/sandbox/kfm2lite-template.json' with { type: 'json' };
 import type { GridTemplateSpec } from '@/creator/image/sliceGrid.ts';
 import type { RGB } from '@/creator/image/alpha.ts';
@@ -52,20 +50,11 @@ function gridSpec(raw: unknown): GridTemplateSpec {
 
 export const TEMPLATES: CharacterTemplate[] = [
   {
-    id: 'kfm2',
-    label: 'Bajiquan Brawler',
-    hint: 'A close-range martial artist with 36 hand-tuned moves. Your description sets the look.',
-    backendTemplateKey: 'templates/kfm2.png',
-    base: KFM2_CHARACTER,
-    grid: gridSpec(kfm2TemplateRaw),
-    bg: { r: 0, g: 255, b: 0 }, // chroma-green screen
-  },
-  {
     id: 'kfm2lite',
     label: 'Bajiquan Brawler (Lite)',
     hint: 'A leaner 26-move brawler on a roomier sheet — cleaner art, sharper faces. Your description sets the look.',
     backendTemplateKey: 'templates/kfm2lite.png',
-    base: KFM2LITE_CHARACTER,
+    base: MANNEQUIN_CHARACTER,
     grid: gridSpec(kfm2liteTemplateRaw),
     bg: { r: 0, g: 255, b: 0 }, // chroma-green screen
   },

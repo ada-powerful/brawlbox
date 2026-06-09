@@ -7,12 +7,7 @@ import type { Character } from '@/engine/schema.ts';
 import { mountGame, type GameHandle } from '@/game/mountGame.ts';
 import { mountGallery, type GalleryHandle } from '@/game/mountGallery.ts';
 import { BASE_ATLAS_URL, BASE_CHARACTER, P1_COLOR, P2_COLOR } from '@/creator/defaults.ts';
-import { bakeFromSheet } from './bake.ts';
-import { HONDA_CHARACTER } from './honda.ts';
-import { KFM_TEMPLATE } from './kfmTemplate.ts';
-import { KFM2_CHARACTER, KFM2_ATLAS_URL } from './kfm2.ts';
-import { KFM2LITE_CHARACTER, KFM2LITE_ATLAS_URL } from './kfm2lite.ts';
-import kfmSheetUrl from './kfm-sheet.webp';
+import { MANNEQUIN_CHARACTER, MANNEQUIN_ATLAS_URL } from './mannequin.ts';
 import { hillsideStage } from '../stages/hillside/index.ts';
 import { CPU_LEVELS, type CpuLevel } from '../runtime/ai.ts';
 
@@ -31,36 +26,16 @@ const BASE_FIGHTER: Fighter = {
   atlasUrl: BASE_ATLAS_URL,
 };
 
-// E. Honda demo: charge specials, mash slap, meter super, command grab. Rendered
-// PROCEDURALLY (no atlasUrl) so each action draws its own colour-coded silhouette
-// — you can see headbutt (orange) vs super (gold) vs grab (green) vs block (blue)
-// vs hit (red) vs thrown (purple). Inputs (P1): charge back→forward+U = Headbutt ·
-// charge down→up+J = Splash · mash I = Hundred Slap · HCB+K = Oicho grab ·
-// full meter + charge back→forward+U+O = Super Headbutt.
-const HONDA_FIGHTER: Fighter = {
-  id: 'honda',
-  label: 'E. Honda (procedural action poses)',
-  character: HONDA_CHARACTER,
+// Wooden artist mannequin ("Strong Bajiquan") — original AI-generated art on the
+// kfm2lite moveset. The bundled, backend-free demo fighter.
+const MANNEQUIN_FIGHTER: Fighter = {
+  id: 'mannequin',
+  label: 'Mannequin (Strong Bajiquan)',
+  character: MANNEQUIN_CHARACTER,
+  atlasUrl: MANNEQUIN_ATLAS_URL,
 };
 
-// Full 36-action KFM from the complete reference sheet (pre-baked atlas). Stage 1:
-// all rows mapped to animations — open the Action gallery to review each one.
-const KFM2_FIGHTER: Fighter = {
-  id: 'kfm2',
-  label: 'KFM (full 36-action sheet)',
-  character: KFM2_CHARACTER,
-  atlasUrl: KFM2_ATLAS_URL,
-};
-
-// Reduced 26-action KFM on the roomier re-padded sheet (kfm2lite). Same engine,
-// fewer/merged moves — the template counterpart for cleaner slicing + sharper
-// generated faces. Open the Action gallery to review the merged kicks.
-const KFM2LITE_FIGHTER: Fighter = {
-  id: 'kfm2lite',
-  label: 'KFM (lite 26-action sheet)',
-  character: KFM2LITE_CHARACTER,
-  atlasUrl: KFM2LITE_ATLAS_URL,
-};
+const FIGHTERS: Fighter[] = [BASE_FIGHTER, MANNEQUIN_FIGHTER];
 
 type Mode = 'match' | 'gallery';
 
@@ -68,14 +43,9 @@ export function Sandbox() {
   const mountRef = useRef<HTMLDivElement>(null);
   const handleRef = useRef<GameHandle | null>(null);
   const galleryRef = useRef<GalleryHandle | null>(null);
-  const [fighters, setFighters] = useState<Fighter[]>([
-    BASE_FIGHTER,
-    HONDA_FIGHTER,
-    KFM2_FIGHTER,
-    KFM2LITE_FIGHTER,
-  ]);
-  const [p1Id, setP1Id] = useState('base');
-  const [p2Id, setP2Id] = useState('base');
+  const fighters = FIGHTERS;
+  const [p1Id, setP1Id] = useState('mannequin');
+  const [p2Id, setP2Id] = useState('mannequin');
   const [mode, setMode] = useState<Mode>('match');
   const [freezeTimer, setFreezeTimer] = useState(false);
   const [infiniteHealth, setInfiniteHealth] = useState(false);
@@ -85,31 +55,8 @@ export function Sandbox() {
   const [p2Control, setP2Control] = useState<'human' | CpuLevel>('normal');
   const cpuP2 = p2Control !== 'human';
   const cpuLevel: CpuLevel = p2Control === 'human' ? 'normal' : p2Control;
-  const [status, setStatus] = useState('Baking sheet character…');
+  const status = 'Ready.';
   const [error, setError] = useState<string | null>(null);
-
-  // Bake the bundled sheet into a real character once, in-browser. On success it
-  // becomes the default P1 so the sandbox opens on the sprite-backed fighter.
-  useEffect(() => {
-    let disposed = false;
-    let bakedUrl: string | null = null;
-    bakeFromSheet(kfmSheetUrl, KFM_TEMPLATE, { id: 'kfm', name: 'KFM (mapped actions)' })
-      .then((baked) => {
-        if (disposed) {
-          URL.revokeObjectURL(baked.atlasUrl);
-          return;
-        }
-        bakedUrl = baked.atlasUrl;
-        setFighters((prev) => [...prev, { id: 'kfm', label: 'KFM (sheet sprites)', ...baked }]);
-        setP1Id('kfm');
-        setStatus('Ready.');
-      })
-      .catch((e) => setError(`Sheet bake failed: ${(e as Error).message}`));
-    return () => {
-      disposed = true;
-      if (bakedUrl) URL.revokeObjectURL(bakedUrl);
-    };
-  }, []);
 
   // (Re)mount the match — or the action gallery — whenever the selection,
   // fighters, or mode change.

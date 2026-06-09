@@ -185,7 +185,7 @@ interface StyleSpec {
   label: string;
   /** Selectable now? false → shown as "coming soon". */
   available: boolean;
-  /** Template the moveset comes from (kfm2 for all, for now). */
+  /** Template the moveset comes from (kfm2lite for all, for now). */
   templateId: string;
   /** Art phrase describing the fighter's discipline + typical attire/stance. */
   art: string;
@@ -198,13 +198,13 @@ export const STYLE: Record<MartialStyle, StyleSpec> = {
   bajiquan: {
     label: 'Bajiquan',
     available: true,
-    templateId: 'kfm2',
+    templateId: 'kfm2lite',
     art: 'a Bajiquan martial artist in a grounded close-range stance',
   },
   boxing: {
     label: 'Boxing',
     available: true,
-    templateId: 'kfm2',
+    templateId: 'kfm2lite',
     art: 'a boxer with raised guard and taped fists',
     atk: 1.1,
     speed: 1.1,
@@ -212,7 +212,7 @@ export const STYLE: Record<MartialStyle, StyleSpec> = {
   muaythai: {
     label: 'Muay Thai',
     available: true,
-    templateId: 'kfm2',
+    templateId: 'kfm2lite',
     art: 'a Muay Thai fighter with elbow and knee strikes, in fight shorts',
     atk: 1.15,
     def: 1.1,
@@ -220,14 +220,14 @@ export const STYLE: Record<MartialStyle, StyleSpec> = {
   taekwondo: {
     label: 'Taekwondo',
     available: true,
-    templateId: 'kfm2',
+    templateId: 'kfm2lite',
     art: 'a Taekwondo practitioner in a dobok, poised for high kicks',
     speed: 1.15,
   },
   wrestling: {
     label: 'Wrestling',
     available: true,
-    templateId: 'kfm2',
+    templateId: 'kfm2lite',
     art: 'a powerful grappler built for throws and clinches',
     def: 1.2,
     speed: 0.9,
@@ -235,7 +235,7 @@ export const STYLE: Record<MartialStyle, StyleSpec> = {
   wingchun: {
     label: 'Wing Chun',
     available: true,
-    templateId: 'kfm2',
+    templateId: 'kfm2lite',
     art: 'a Wing Chun fighter with a tight centerline guard and rapid chain punches',
     atk: 0.95,
     speed: 1.1,
