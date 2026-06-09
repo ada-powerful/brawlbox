@@ -58,7 +58,7 @@ drift never exposes an edge through a near opening. Keep focal detail roughly
 centered and out of the outer ~40px margins. Layers cover-fit (fill + crop), so
 exact dims are forgiving, but authoring at `960×460` / `960×80` avoids cropping.
 
-## The `hillside` reference stage (sliced from a MUGEN rip)
+## The `hillside` reference stage (Nano Banana 2 generated — original art, CC0)
 
 ```ts
 layers: [
@@ -68,8 +68,10 @@ layers: [
 floorUrl,                                // wooden platform
 ```
 
-The wall's blue MUGEN matte `rgb(128,192,255)` (the window glass + the gaps
-between the top slats) was alpha-cut to transparent so the mountains show through.
+The three layers were generated with Nano Banana 2 to the spec below. The wall was
+generated with its window glass + the gaps between the top slats filled with a flat
+magenta chroma key `rgb(255,0,255)`, then alpha-cut + despilled to transparent so
+the mountains show through.
 
 ## Nano Banana 2 generation spec
 
