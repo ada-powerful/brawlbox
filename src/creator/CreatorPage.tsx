@@ -1089,7 +1089,10 @@ export function CreatorPage() {
 
               {character && (
                 <>
-                  {!BACKEND_MODE && (
+                  {/* Only the freeform path uses this OpenAI per-pose model.
+                      Template flows (incl. every photo flow) re-skin via NB2
+                      (nano-banana-2), so the field would be misleading there. */}
+                  {!BACKEND_MODE && !template && (
                     <div className="flex items-center gap-2">
                       <Label htmlFor="model" className="text-muted-foreground whitespace-nowrap">
                         Image model
