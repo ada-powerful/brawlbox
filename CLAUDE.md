@@ -29,7 +29,7 @@ src/
   input/     ← keyboard + gamepad polling.
   runtime/   ← rAF loop + accumulator + interpolation; ai.ts (CPU P2, input-layer).
   game/      ← mountGame (the playable page) + mountGallery (action gallery).
-  sandbox/   ← backend-free local test harness; KFM + Honda demo characters + templates.
+  sandbox/   ← backend-free local test harness; wooden-mannequin demo character + templates.
   stages/    ← render-only parallax stage backgrounds (e.g. hillside).
   creator/   ← React creator UI (prompt → character, sprite gen, playtest).
   ai/        ← LLM / image / fal provider clients (now mostly behind the backend proxy).
@@ -101,9 +101,9 @@ Recursive types (`Trigger`, `Value`) need hand-typed `z.ZodType<T>` because Zod 
   - **Charge & held-direction motions** (`commands.ts`: `[dir]N`, `/dir`), **power meter** (`PowerAdd`/`PowerSet`, `MAX_POWER`), **opponent triggers** (`p2BodyDist`, `p2Dist`, `p2.pos.y`, `p2.life`, `p2.stateNo`).
   - **Dizzy/stun meter**, **launch → knockdown → getup** flow, **OTG**, and distinct end states (KO lies down / time-up loser slumps / winner poses).
   - **Canonical action vocabulary** (`render/poses.ts` `CANONICAL_ACTIONS`) — the shared ~36-action set every character maps onto; procedural colour-coded poses render any character with no art. `base` declares an animation for every canonical id (the art/authoring template). An **action gallery** (`mountGallery`) cycles a fighter through all of them.
-  - **Demo/sandbox characters**: full 36-action **KFM** (Kung Fu Man) and an E. Honda built from base. **CPU P2** opponent in the input layer (`runtime/ai.ts`, 5 difficulty levels standstill→expert) — never touches `tick`.
+  - **Demo/sandbox character**: a wooden artist-mannequin fighter (original art) on a ~26-action moveset, plus the procedural stick-figure `base`. **CPU P2** opponent in the input layer (`runtime/ai.ts`, 5 difficulty levels standstill→expert) — never touches `tick`.
   - Render-side: follow-camera, parallax stage backgrounds, 30s round timer (win-by-life), unlimited/showcase mode for creator playtest.
   - **M8 determinism stays green; 294 tests pass.** All additions live outside `tick` or are additive/deterministic.
   - Deferred (next gameplay pass): throw teching/air throws, guard meter/parries/pushblock, de-hardcoding `'stand'`/`'ko'`/`'hit.*'`/`'guard.*'` transition literals.
-- **Phase 2: mid-build** (AI character creator). Template pipeline: pick a template → nano-banana-2 re-skins a green-screen KFM sheet → content-aware slice/key/despill/bake → atlas → engine. See `template-creator-pipeline` memory + `PHASE_2_PLAN.md`.
+- **Phase 2: mid-build** (AI character creator). Template pipeline: pick a template → nano-banana-2 re-skins a green-screen template sheet → content-aware slice/key/despill/bake → atlas → engine. See `src/creator/`.
 - **Phase 3: future** (rollback netcode, online play). Engine architecture is still prepared via the 4 commitments above.
