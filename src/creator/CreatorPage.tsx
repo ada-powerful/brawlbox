@@ -507,13 +507,15 @@ export function CreatorPage() {
       // aspect) and map them to keys by the template's known grid structure.
       const images = await sliceSheetByDetection(fetched.bitmap, tpl.grid, keys, tpl.bg);
       const packed = await packSprites(images, {
-        // Larger cells than the 160 default so 4K poses are packed near 1:1
-        // (downscaled, sharp) instead of thrown away. 16×240=3840 / 15×240=3600,
-        // under the 4096 GPU texture limit. cellH only affects spriteScale, not
-        // on-screen size (= content/cellH × size.height), so the fighter is
-        // unchanged in size — just crisper.
-        cellW: 240,
-        cellH: 240,
+        // Pack poses near 1:1 with the 4K re-skin source (the 12-col sheet is
+        // ≈341px per source cell) so the fighter keeps its full generated detail
+        // instead of throwing ~40% of it away at 240px. The canonical-action
+        // atlas is ~10×9 cells → 10×340=3400 / 9×340=3060, both under the 4096
+        // GPU texture limit. cellH only affects spriteScale, not on-screen size
+        // (= content/cellH × size.height), so the fighter is unchanged in size —
+        // just sharper.
+        cellW: 340,
+        cellH: 340,
         chromaKey: tpl.bg,
         chromaTolerance: 110,
         despill: true,
